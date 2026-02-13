@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Majic Movie Selector</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="container">
+    <h1>Majic Movie Selector</h1>
+    <p class="subtitle">Describe your vibe and get a shortlist.</p>
+
+    <form method="post" class="card">
+      <label for="prompt">What are you in the mood for?</label>
+      <textarea id="prompt" name="prompt" rows="4" placeholder="Funny sci-fi under 110 minutes for family movie night">{{ prompt }}</textarea>
+
+      <div class="row">
+        <label for="limit">How many picks?</label>
+        <input id="limit" name="limit" type="number" min="1" max="10" value="{{ limit }}">
+      </div>
+
+      <button type="submit">Recommend</button>
+    </form>
+
+    {% if preferences %}
+    <section class="card meta">
+      <h2>Parsed Preferences</h2>
+      <p><strong>Genres:</strong> {{ preferences.genres | list }}</p>
+      <p><strong>Moods:</strong> {{ preferences.moods | list }}</p>
+      <p><strong>Max Runtime:</strong> {{ preferences.max_runtime_minutes or "Any" }}</p>
+      <p><strong>Min Year:</strong> {{ preferences.min_year or "Any" }}</p>
+      <p><strong>Family Only:</strong> {{ "Yes" if preferences.family_only else "No" }}</p>
+    </section>
+    {% endif %}
+
+    {% if movies %}
+    <section class="results">
+      <h2>Recommendations</h2>
+      {% for movie in movies %}
+      <article class="card movie">
+        <h3>{{ movie.title }} <span>({{ movie.year }})</span></h3>
+        <p>{{ movie.synopsis }}</p>
+        <p class="chips">
+          <span>{{ movie.runtime_minutes }} min</span>
+          {% for genre in movie.genres %}
+          <span>{{ genre }}</span>
+          {% endfor %}
+        </p>
+      </article>
+      {% endfor %}
+    </section>
+    {% elif preferences %}
+    <p class="empty">No matches found. Try broader criteria.</p>
+    {% endif %}
+  </main>
+</body>
+</html>
