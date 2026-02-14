@@ -1,0 +1,579 @@
+INFO:     Will watch for changes in these directories: ['/Users/w00tock/Desktop/STuFF /Majic Movie selector']
+INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)
+INFO:     Started reloader process [22669] using WatchFiles
+INFO:     Started server process [22726]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:53891 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53897 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53898 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53916 - "GET /api/integrations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53938 - "GET /api/recommendations?user_id=default&count=3 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53959 - "GET /api/release-calendar?user_id=default HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53977 - "POST /api/download-cancel HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54107 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54108 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54218 - "GET /api/recommendations?user_id=default&count=5 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54364 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54365 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+WARNING:  WatchFiles detected changes in 'app/agents/radarr_agent.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [22726]
+INFO:     Started server process [26659]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/agents/radarr_agent.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [26659]
+INFO:     Started server process [26666]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/agents/upcoming_agent.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [26666]
+INFO:     Started server process [26705]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/agents/upcoming_agent.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [26705]
+INFO:     Started server process [26714]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/agents/upcoming_agent.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [26714]
+INFO:     Started server process [26723]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/agents/upcoming_agent.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [26723]
+INFO:     Started server process [26729]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/clients/rottentomatoes_client.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [26729]
+INFO:     Started server process [26763]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/clients/rottentomatoes_client.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [26763]
+INFO:     Started server process [26789]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/agents/rottentomatoes_agent.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [26789]
+INFO:     Started server process [26793]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/agents/rottentomatoes_agent.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [26793]
+INFO:     Started server process [26803]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:54605 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54606 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+WARNING:  WatchFiles detected changes in 'app/services/recommender.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [26803]
+INFO:     Started server process [26853]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/services/recommender.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [26853]
+INFO:     Started server process [26872]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/clients/poster_lookup_client.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [26872]
+INFO:     Started server process [26895]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/clients/poster_lookup_client.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [26895]
+INFO:     Started server process [26900]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/services/swarm.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [26900]
+INFO:     Started server process [26908]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/services/swarm.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [26908]
+INFO:     Started server process [26911]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/clients/poster_lookup_client.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [26911]
+INFO:     Started server process [26915]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/clients/poster_lookup_client.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [26915]
+INFO:     Started server process [26917]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/clients/poster_lookup_client.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [26917]
+INFO:     Started server process [26920]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:54780 - "GET /api/recommendations?user_id=default&count=6 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55020 - "POST /api/terminal/connect HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55020 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55020 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55020 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55076 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55105 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55128 - "GET /api/recommendations?user_id=default&count=8 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55134 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55135 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55136 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55136 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55136 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55155 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55155 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55192 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55193 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55194 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55194 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55225 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55226 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55251 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55282 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55283 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55329 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55331 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55332 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55344 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55376 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55398 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55446 - "POST /api/chat HTTP/1.1" 404 Not Found
+WARNING:  WatchFiles detected changes in 'app/main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [26920]
+INFO:     Started server process [28885]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [28885]
+INFO:     Started server process [28891]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:55494 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55495 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55698 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55699 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55700 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55862 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55863 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55864 - "POST /api/chat HTTP/1.1" 404 Not Found
+WARNING:  WatchFiles detected changes in 'tests/test_feedback_categories.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [28891]
+INFO:     Started server process [29259]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'tests/test_feedback_categories.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [29259]
+INFO:     Started server process [29262]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:56061 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56062 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56063 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56126 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56194 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56195 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56196 - "POST /api/chat HTTP/1.1" 404 Not Found
+WARNING:  WatchFiles detected changes in 'app/main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [29262]
+INFO:     Started server process [29692]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [29692]
+INFO:     Started server process [29697]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:56252 - "GET /api/recommendations?user_id=default&count=5 HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'app/services/recommender.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [29697]
+INFO:     Started server process [30326]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:56319 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56320 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56321 - "POST /api/chat HTTP/1.1" 404 Not Found
+WARNING:  WatchFiles detected changes in 'app/services/recommender.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [30326]
+INFO:     Started server process [30328]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:56347 - "GET /api/recommendations?user_id=default&count=5 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56379 - "GET /api/recommendations?user_id=default&count=10&sources=oscars HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56512 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56513 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56514 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56601 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56643 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56644 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56645 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56899 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56900 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56901 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57007 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57087 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57088 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57089 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57282 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57283 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57284 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57618 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57619 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57620 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57809 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57810 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57811 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58006 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58007 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58008 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58148 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58166 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58167 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58168 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:0 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /static/styles.css HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /static/app.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/integrations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/release-calendar?user_id=user-41aeba4c-b19c-4873-8801-349462a91378 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/recommendations?user_id=user-41aeba4c-b19c-4873-8801-349462a91378&count=24 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58362 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58363 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58364 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58550 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58551 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58552 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /static/styles.css HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /static/app.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/integrations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/recommendations?user_id=user-41aeba4c-b19c-4873-8801-349462a91378&count=24 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/release-calendar?user_id=user-41aeba4c-b19c-4873-8801-349462a91378 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /static/styles.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:0 - "GET /static/app.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:0 - "GET /api/integrations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/release-calendar?user_id=user-41aeba4c-b19c-4873-8801-349462a91378 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/recommendations?user_id=user-41aeba4c-b19c-4873-8801-349462a91378&count=24 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "POST /api/download-history/clear HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58781 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58782 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58783 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58970 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58971 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58972 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'app/clients/poster_lookup_client.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [30328]
+INFO:     Started server process [33128]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:59342 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59343 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59344 - "POST /api/chat HTTP/1.1" 404 Not Found
+WARNING:  WatchFiles detected changes in 'app/clients/poster_lookup_client.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [33128]
+INFO:     Started server process [33132]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [33132]
+INFO:     Started server process [33145]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [33145]
+INFO:     Started server process [33149]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [33149]
+INFO:     Started server process [33189]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [33189]
+INFO:     Started server process [33191]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [33191]
+INFO:     Started server process [33195]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59703 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59704 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59705 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59746 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59864 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59865 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59866 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /static/styles.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:0 - "GET /static/app.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/integrations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/release-calendar?user_id=user-41aeba4c-b19c-4873-8801-349462a91378 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/recommendations?user_id=user-41aeba4c-b19c-4873-8801-349462a91378&count=24 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /static/app.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:0 - "GET /api/integrations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/download-history?limit=40 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/recommendations?user_id=user-41aeba4c-b19c-4873-8801-349462a91378&count=24 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/release-calendar?user_id=user-41aeba4c-b19c-4873-8801-349462a91378 HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in '.venv/lib/python3.14/site-packages/anyio/_backends/_asyncio.py', '.venv/lib/python3.14/site-packages/pip/_internal/req/req_uninstall.py', '.venv/lib/python3.14/site-packages/uvicorn/supervisors/multiprocess.py', '.venv/lib/python3.14/site-packages/pip/_vendor/urllib3/util/url.py', '.venv/lib/python3.14/site-packages/openai/types/beta/threads/message_content_delta.py', '.venv/lib/python3.14/site-packages/tqdm/contrib/bells.py', '.venv/lib/python3.14/site-packages/markupsafe/_native.py', '.venv/lib/python3.14/site-packages/openai/types/beta/threads/file_citation_annotation.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [33195]
+WARNING:  WatchFiles detected changes in '.venv/lib/python3.14/site-packages/pydantic/__init__.py', '.venv/lib/python3.14/site-packages/pygments/formatters/html.py', '.venv/lib/python3.14/site-packages/websockets/client.py', '.venv/lib/python3.14/site-packages/openai/types/beta/threads/message_update_params.py', '.venv/lib/python3.14/site-packages/anyio/__init__.py', '.venv/lib/python3.14/site-packages/openai/types/realtime/conversation_item_delete_event_param.py', '.venv/lib/python3.14/site-packages/pygments/formatters/img.py', '.venv/lib/python3.14/site-packages/numpy/random/tests/__init__.py', '.venv/lib/python3.14/site-packages/pydantic/_internal/_namespace_utils.py', '.venv/lib/python3.14/site-packages/anyio/streams/buffered.py', '.venv/lib/python3.14/site-packages/pip/_vendor/distro/__init__.py', '.venv/lib/python3.14/site-packages/numpy/lib/format.py', '.venv/lib/python3.14/site-packages/numpy/_core/tests/test_scalarbuffer.py', '.venv/lib/python3.14/site-packages/pip/_vendor/distlib/__init__.py', '.venv/lib/python3.14/site-packages/tqdm/_monitor.py', '.venv/lib/python3.14/site-packages/numpy/matrixlib/tests/test_regression.py', '.venv/lib/python3.14/site-packages/packaging/__init__.py', '.venv/lib/python3.14/site-packages/openai/types/beta/threads/text_content_block_param.py'. Reloading...
+INFO:     Started server process [33733]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in '.venv/lib/python3.14/site-packages/pip/_vendor/certifi/__main__.py', '.venv/lib/python3.14/site-packages/openai/types/video_list_params.py', '.venv/lib/python3.14/site-packages/openai/types/beta/threads/file_citation_delta_annotation.py', '.venv/lib/python3.14/site-packages/openai/lib/_parsing/_completions.py', '.venv/lib/python3.14/site-packages/jiter/__init__.py', '.venv/lib/python3.14/site-packages/uvicorn/middleware/wsgi.py', '.venv/lib/python3.14/site-packages/httpcore/_async/http2.py', '.venv/lib/python3.14/site-packages/openai/types/eval_create_params.py', '.venv/lib/python3.14/site-packages/pip/_internal/network/xmlrpc.py', '.venv/lib/python3.14/site-packages/werkzeug/routing/map.py', '.venv/lib/python3.14/site-packages/openai/types/realtime/response_text_delta_event.py', '.venv/lib/python3.14/site-packages/pip/_vendor/tomli/_re.py', '.venv/lib/python3.14/site-packages/numpy/typing/tests/data/pass/ma.py', '.venv/lib/python3.14/site-packages/werkzeug/formparser.py', '.venv/lib/python3.14/site-packages/werkzeug/routing/converters.py', '.venv/lib/python3.14/site-packages/werkzeug/debug/__init__.py', '.venv/lib/python3.14/site-packages/numpy/typing/tests/data/pass/arrayprint.py', '.venv/lib/python3.14/site-packages/numpy/_core/tests/test_dtype.py', '.venv/lib/python3.14/site-packages/packaging/_elffile.py', '.venv/lib/python3.14/site-packages/openai/_streaming.py', 'app/clients/http_client.py', '.venv/lib/python3.14/site-packages/openai/types/realtime/realtime_truncation_param.py', '.venv/lib/python3.14/site-packages/openai/types/skills/skill_version.py', '.venv/lib/python3.14/site-packages/pip/_vendor/dependency_groups/__main__.py', '.venv/lib/python3.14/site-packages/numpy/typing/tests/data/pass/warnings_and_errors.py', '.venv/lib/python3.14/site-packages/openai/types/realtime/realtime_tools_config_union_param.py', '.venv/lib/python3.14/site-packages/openai/_compat.py', '.venv/lib/python3.14/site-packages/pip/_vendor/rich/padding.py', '.venv/lib/python3.14/site-packages/numpy/typing/tests/data/pass/numeric.py', '.venv/lib/python3.14/site-packages/_pytest/assertion/__init__.py', '.venv/lib/python3.14/site-packages/openai/types/skills/deleted_skill_version.py', '.venv/lib/python3.14/site-packages/packaging/_structures.py', '.venv/lib/python3.14/site-packages/httpcore/_async/__init__.py', '.venv/lib/python3.14/site-packages/pip/_vendor/distlib/scripts.py', '.venv/lib/python3.14/site-packages/pip/_vendor/platformdirs/android.py', '.venv/lib/python3.14/site-packages/werkzeug/_reloader.py', '.venv/lib/python3.14/site-packages/numpy/lib/__init__.py', '.venv/lib/python3.14/site-packages/pip/_vendor/rich/measure.py', '.venv/lib/python3.14/site-packages/pip/_internal/distributions/sdist.py', '.venv/lib/python3.14/site-packages/pygments/lexers/robotframework.py', '.venv/lib/python3.14/site-packages/pip/_vendor/rich/default_styles.py', 'app/services/movie_catalog.py', '.venv/lib/python3.14/site-packages/openai/types/beta/threads/annotation_delta.py', '.venv/lib/python3.14/site-packages/openai/types/beta/chatkit/chatkit_thread_user_message_item.py', '.venv/lib/python3.14/site-packages/pygments/lexers/d.py', '.venv/lib/python3.14/site-packages/packaging/utils.py', '.venv/lib/python3.14/site-packages/numpy/fft/_pocketfft.py', '.venv/lib/python3.14/site-packages/anyio/streams/file.py', '.venv/lib/python3.14/site-packages/numpy/core/shape_base.py', '.venv/lib/python3.14/site-packages/starlette/responses.py', '.venv/lib/python3.14/site-packages/numpy/f2py/use_rules.py', '.venv/lib/python3.14/site-packages/openai/types/beta/threads/image_url_delta.py', '.venv/lib/python3.14/site-packages/openai/types/realtime/response_create_event_param.py', '.venv/lib/python3.14/site-packages/openai/types/video_model.py', '.venv/lib/python3.14/site-packages/pygments/lexers/smithy.py', '.venv/lib/python3.14/site-packages/openai/types/vector_stores/file_batch_create_params.py', '.venv/lib/python3.14/site-packages/numpy/lib/introspect.py', '.venv/lib/python3.14/site-packages/numpy/lib/_type_check_impl.py', '.venv/lib/python3.14/site-packages/openai/types/beta/threads/message_content.py', '.venv/lib/python3.14/site-packages/pygments/styles/vs.py', '.venv/lib/python3.14/site-packages/openai/resources/beta/threads/messages.py', '.venv/lib/python3.14/site-packages/werkzeug/datastructures/range.py', '.venv/lib/python3.14/site-packages/numpy/_core/tests/test_extint128.py', '.venv/lib/python3.14/site-packages/tqdm/_main.py', '.venv/lib/python3.14/site-packages/pygments/lexers/fortran.py', '.venv/lib/python3.14/site-packages/pydantic/__init__.py', '.venv/lib/python3.14/site-packages/openai/types/uploads/part_create_params.py', '.venv/lib/python3.14/site-packages/numpy/matrixlib/tests/test_numeric.py', '.venv/lib/python3.14/site-packages/numpy/_core/tests/test_argparse.py', '.venv/lib/python3.14/site-packages/pip/_vendor/urllib3/packages/backports/__init__.py', '.venv/lib/python3.14/site-packages/pip/_internal/models/selection_prefs.py', '.venv/lib/python3.14/site-packages/pip/_internal/cli/command_context.py', '.venv/lib/python3.14/site-packages/openai/types/audio/transcription_text_segment_event.py', '.venv/lib/python3.14/site-packages/fastapi/security/oauth2.py', '.venv/lib/python3.14/site-packages/pydantic/_migration.py', '.venv/lib/python3.14/site-packages/werkzeug/routing/exceptions.py', '.venv/lib/python3.14/site-packages/openai/types/realtime/realtime_tools_config_union.py', '.venv/lib/python3.14/site-packages/openai/types/responses/container_auto_param.py', '.venv/lib/python3.14/site-packages/pip/_vendor/requests/auth.py', '.venv/lib/python3.14/site-packages/pip/_vendor/rich/json.py', '.venv/lib/python3.14/site-packages/openai/types/realtime/response_mcp_call_arguments_delta.py', '.venv/lib/python3.14/site-packages/pygments/lexers/lilypond.py', '.venv/lib/python3.14/site-packages/pygments/lexers/agile.py', '.venv/lib/python3.14/site-packages/openai/types/responses/response_code_interpreter_call_code_delta_event.py', '.venv/lib/python3.14/site-packages/websockets/headers.py', '.venv/lib/python3.14/site-packages/pygments/lexers/prolog.py', '.venv/lib/python3.14/site-packages/pydantic/v1/config.py', '.venv/lib/python3.14/site-packages/openai/types/responses/container_auto.py', '.venv/lib/python3.14/site-packages/_pytest/terminalprogress.py', '.venv/lib/python3.14/site-packages/pip/_vendor/rich/themes.py', '.venv/lib/python3.14/site-packages/pip/_vendor/cachecontrol/caches/file_cache.py', '.venv/lib/python3.14/site-packages/_pytest/scope.py', '.venv/lib/python3.14/site-packages/uvicorn/__main__.py', 'tests/test_memory_store.py', 'app/clients/radarr_client.py', '.venv/lib/python3.14/site-packages/pydantic/deprecated/__init__.py', '.venv/lib/python3.14/site-packages/openai/types/shared_params/function_definition.py', '.venv/lib/python3.14/site-packages/werkzeug/datastructures/csp.py', '.venv/lib/python3.14/site-packages/numpy/_core/tests/test_hashtable.py', '.venv/lib/python3.14/site-packages/yaml/dumper.py', '.venv/lib/python3.14/site-packages/pygments/lexers/roboconf.py', '.venv/lib/python3.14/site-packages/numpy/_core/umath.py', '.venv/lib/python3.14/site-packages/pydantic/_internal/_dataclasses.py', '.venv/lib/python3.14/site-packages/pip/_vendor/rich/scope.py', '.venv/lib/python3.14/site-packages/flask/templating.py', '.venv/lib/python3.14/site-packages/numpy/typing/tests/data/pass/ufunc_config.py', '.venv/lib/python3.14/site-packages/numpy/f2py/_backends/_backend.py', '.venv/lib/python3.14/site-packages/openai/types/audio/transcription_text_done_event.py', '.venv/lib/python3.14/site-packages/numpy/core/defchararray.py', '.venv/lib/python3.14/site-packages/pygments/formatters/_mapping.py', '.venv/lib/python3.14/site-packages/pygments/lexers/modeling.py', '.venv/lib/python3.14/site-packages/sniffio/__init__.py', '.venv/lib/python3.14/site-packages/pygments/lexers/tablegen.py', '.venv/lib/python3.14/site-packages/numpy/_core/fromnumeric.py', '.venv/lib/python3.14/site-packages/tqdm/_tqdm.py', '.venv/lib/python3.14/site-packages/fastapi/cli.py', '.venv/lib/python3.14/site-packages/pydantic_settings/sources/providers/json.py', '.venv/lib/python3.14/site-packages/openai/_utils/_transform.py', '.venv/lib/python3.14/site-packages/numpy/typing/tests/__init__.py', '.venv/lib/python3.14/site-packages/fastapi/dependencies/models.py', '.venv/lib/python3.14/site-packages/openai/types/realtime/conversation_item_delete_event.py', '.venv/lib/python3.14/site-packages/pygments/lexers/praat.py', '.venv/lib/python3.14/site-packages/fastapi/background.py', '.venv/lib/python3.14/site-packages/openai/resources/images.py', '.venv/lib/python3.14/site-packages/fastapi/logger.py', '.venv/lib/python3.14/site-packages/openai/types/uploads/upload_part.py', '.venv/lib/python3.14/site-packages/openai/types/beta/threads/image_url_content_block.py', '.venv/lib/python3.14/site-packages/pip/_internal/models/link.py', '.venv/lib/python3.14/site-packages/pip/_vendor/urllib3/packages/__init__.py', '.venv/lib/python3.14/site-packages/flask/sansio/app.py', '.venv/lib/python3.14/site-packages/numpy/_core/tests/test_multiarray.py', '.venv/lib/python3.14/site-packages/openai/types/beta/thread_create_params.py', '.venv/lib/python3.14/site-packages/openai/resources/fine_tuning/fine_tuning.py', '.venv/lib/python3.14/site-packages/httpx/_transports/asgi.py', '.venv/lib/python3.14/site-packages/numpy/core/function_base.py', '.venv/lib/python3.14/site-packages/numpy/lib/stride_tricks.py', '.venv/lib/python3.14/site-packages/tqdm/asyncio.py', '.venv/lib/python3.14/site-packages/numpy/_core/tests/test_umath_accuracy.py', '.venv/lib/python3.14/site-packages/pydantic/_internal/__init__.py', '.venv/lib/python3.14/site-packages/openai/types/webhooks/eval_run_canceled_webhook_event.py', '.venv/lib/python3.14/site-packages/numpy/strings/__init__.py', '.venv/lib/python3.14/site-packages/tqdm/_tqdm_pandas.py', '.venv/lib/python3.14/site-packages/openai/types/evals/run_create_response.py', '.venv/lib/python3.14/site-packages/pydantic/deprecated/decorator.py', '.venv/lib/python3.14/site-packages/websockets/sync/server.py', '.venv/lib/python3.14/site-packages/pygments/lexers/lean.py', '.venv/lib/python3.14/site-packages/numpy/_core/tests/test_indexerrors.py', '.venv/lib/python3.14/site-packages/_pytest/assertion/util.py', '.venv/lib/python3.14/site-packages/numpy/_core/tests/test_umath_complex.py', '.venv/lib/python3.14/site-packages/openai/types/realtime/response_create_event.py', '.venv/lib/python3.14/site-packages/openai/types/realtime/response_mcp_call_failed.py', '.venv/lib/python3.14/site-packages/numpy/polynomial/polynomial.py', '.venv/lib/python3.14/site-packages/starlette/status.py', '.venv/lib/python3.14/site-packages/jinja2/sandbox.py', '.venv/lib/python3.14/site-packages/pip/_internal/network/cache.py', '.venv/lib/python3.14/site-packages/pygments/lexers/perl.py', '.venv/lib/python3.14/site-packages/openai/types/shared_params/function_parameters.py', '.venv/lib/python3.14/site-packages/numpy/typing/tests/data/pass/ufuncs.py', '.venv/lib/python3.14/site-packages/numpy/typing/tests/data/pass/mod.py', '.venv/lib/python3.14/site-packages/starlette/middleware/gzip.py', '.venv/lib/python3.14/site-packages/openai/types/graders/score_model_grader_param.py', '.venv/lib/python3.14/site-packages/openai/types/beta/threads/text_content_block.py', '.venv/lib/python3.14/site-packages/_pytest/tracemalloc.py', '.venv/lib/python3.14/site-packages/openai/types/realtime/realtime_transcription_session_create_response.py', '.venv/lib/python3.14/site-packages/pydantic/fields.py', '.venv/lib/python3.14/site-packages/numpy/lib/tests/test_loadtxt.py', '.venv/lib/python3.14/site-packages/jinja2/__init__.py', '.venv/lib/python3.14/site-packages/numpy/matrixlib/tests/test_multiarray.py', '.venv/lib/python3.14/site-packages/jinja2/_identifier.py', '.venv/lib/python3.14/site-packages/pip/_internal/models/direct_url.py', '.venv/lib/python3.14/site-packages/openai/types/beta/chatkit/chat_session_expires_after_param.py', '.venv/lib/python3.14/site-packages/numpy/polynomial/tests/test_symbol.py', '.venv/lib/python3.14/site-packages/numpy/tests/__init__.py', '.venv/lib/python3.14/site-packages/pip/_vendor/certifi/core.py', '.venv/lib/python3.14/site-packages/h11/_util.py', '.venv/lib/python3.14/site-packages/pip/_internal/operations/build/build_tracker.py', '.venv/lib/python3.14/site-packages/click/termui.py', '.venv/lib/python3.14/site-packages/pip/_vendor/rich/align.py', '.venv/lib/python3.14/site-packages/openai/types/responses/response_audio_transcript_done_event.py', '.venv/lib/python3.14/site-packages/tqdm/dask.py', '.venv/lib/python3.14/site-packages/uvicorn/_compat.py', '.venv/lib/python3.14/site-packages/pip/_internal/resolution/resolvelib/factory.py', '.venv/lib/python3.14/site-packages/pygments/lexers/_luau_builtins.py', '.venv/lib/python3.14/site-packages/openai/types/webhooks/batch_failed_webhook_event.py', 'app/clients/tmdb_client.py', '.venv/lib/python3.14/site-packages/openai/types/audio/transcription_diarized_segment.py', '.venv/lib/python3.14/site-packages/pygments/lexers/installers.py', '.venv/lib/python3.14/site-packages/pip/_internal/commands/inspect.py', '.venv/lib/python3.14/site-packages/pip/_internal/resolution/legacy/resolver.py', '.venv/lib/python3.14/site-packages/openai/types/skill.py', '.venv/lib/python3.14/site-packages/anyio/_core/_asyncio_selector_thread.py', '.venv/lib/python3.14/site-packages/numpy/typing/tests/data/pass/multiarray.py', '.venv/lib/python3.14/site-packages/openai/types/responses/local_environment.py', '.venv/lib/python3.14/site-packages/pip/_vendor/dependency_groups/_lint_dependency_groups.py', '.venv/lib/python3.14/site-packages/pygments/lexers/_csound_builtins.py', '.venv/lib/python3.14/site-packages/pygments/lexers/scdoc.py', '.venv/lib/python3.14/site-packages/openai/types/beta/chatkit/chat_session_file_upload.py', '.venv/lib/python3.14/site-packages/openai/types/responses/input_item_list_params.py', '.venv/lib/python3.14/site-packages/numpy/f2py/__version__.py', '.venv/lib/python3.14/site-packages/openai/types/realtime/conversation_item_input_audio_transcription_segment.py', '.venv/lib/python3.14/site-packages/openai/types/responses/response_custom_tool_call_input_done_event.py', '.venv/lib/python3.14/site-packages/numpy/typing/tests/data/pass/arrayterator.py', '.venv/lib/python3.14/site-packages/numpy/_core/tests/test_arrayobject.py', '.venv/lib/python3.14/site-packages/yaml/nodes.py', '.venv/lib/python3.14/site-packages/openai/types/realtime/response_content_part_done_event.py', '.venv/lib/python3.14/site-packages/openai/_utils/_utils.py', '.venv/lib/python3.14/site-packages/openai/types/realtime/response_mcp_call_completed.py', '.venv/lib/python3.14/site-packages/openai/types/realtime/realtime_truncation.py', '.venv/lib/python3.14/site-packages/openai/types/realtime/conversation_item_deleted_event.py', '.venv/lib/python3.14/site-packages/openai/types/responses/response_compact_params.py', '.venv/lib/python3.14/site-packages/pip/_vendor/rich/text.py', '.venv/lib/python3.14/site-packages/pip/_internal/commands/uninstall.py', '.venv/lib/python3.14/site-packages/jinja2/lexer.py', '.venv/lib/python3.14/site-packages/tqdm/contrib/concurrent.py', '.venv/lib/python3.14/site-packages/openai/types/beta/realtime/__init__.py', '.venv/lib/python3.14/site-packages/pygments/lexers/graphics.py', '.venv/lib/python3.14/site-packages/pip/_vendor/platformdirs/api.py', '.venv/lib/python3.14/site-packages/openai/types/beta/threads/message_list_params.py', '.venv/lib/python3.14/site-packages/anyio/streams/text.py', '.venv/lib/python3.14/site-packages/websockets/asyncio/__init__.py', '.venv/lib/python3.14/site-packages/openai/types/responses/response_custom_tool_call_output.py', '.venv/lib/python3.14/site-packages/openai/types/realtime/response_output_item_done_event.py', '.venv/lib/python3.14/site-packages/openai/types/realtime/conversation_item_input_audio_transcription_delta_event.py', '.venv/lib/python3.14/site-packages/openai/types/realtime/realtime_response_usage.py', '.venv/lib/python3.14/site-packages/pygments/lexers/mosel.py', '.venv/lib/python3.14/site-packages/anyio/abc/_resources.py', '.venv/lib/python3.14/site-packages/pydantic_settings/sources/__init__.py', '.venv/lib/python3.14/site-packages/openai/types/beta/threads/message_content_part_param.py', '.venv/lib/python3.14/site-packages/numpy/f2py/cb_rules.py', '.venv/lib/python3.14/site-packages/openai/resources/responses/__init__.py', '.venv/lib/python3.14/site-packages/numpy/core/multiarray.py', '.venv/lib/python3.14/site-packages/openai/resources/evals/runs/__init__.py', '.venv/lib/python3.14/site-packages/openai/types/realtime/realtime_transcription_session_audio_input_turn_detection_param.py', '.venv/lib/python3.14/site-packages/httpcore/_backends/sync.py', '.venv/lib/python3.14/site-packages/openai/resources/skills/versions/versions.py', '.venv/lib/python3.14/site-packages/pydantic_core/__init__.py', '.venv/lib/python3.14/site-packages/openai/types/audio/translation_verbose.py', '.venv/lib/python3.14/site-packages/anyio/_core/_resources.py', '.venv/lib/python3.14/site-packages/_pytest/doctest.py', '.venv/lib/python3.14/site-packages/pip/_vendor/tomli/__init__.py', '.venv/lib/python3.14/site-packages/pygments/styles/onedark.py', '.venv/lib/python3.14/site-packages/openai/types/skill_create_params.py', '.venv/lib/python3.14/site-packages/numpy/lib/npyio.py', '.venv/lib/python3.14/site-packages/openai/types/realtime/realtime_transcription_session_audio_input_turn_detection.py', '.venv/lib/python3.14/site-packages/openai/types/moderation.py', '.venv/lib/python3.14/site-packages/numpy/typing/tests/data/pass/comparisons.py', '.venv/lib/python3.14/site-packages/_yaml/__init__.py', '.venv/lib/python3.14/site-packages/websockets/asyncio/client.py'. Reloading...
+INFO:     Started server process [34071]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:60038 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60060 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60061 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60062 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60061 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60193 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60254 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60256 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60258 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60325 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60326 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60327 - "POST /api/chat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60427 - "GET /api/status HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60428 - "GET /api/sysinfo HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60429 - "POST /api/chat HTTP/1.1" 404 Not Found

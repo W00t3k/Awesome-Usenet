@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ app_title }} - Settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f0f0f;
+      --surface: #1a1a1a;
+      --surface-2: #242424;
+      --border: #333;
+      --text: #f5f5f5;
+      --text-dim: #888;
+      --accent: #e50914;
+      --accent-hover: #f6121d;
+      --green: #46d369;
+      --yellow: #f5c518;
+      --blue: #0080ff;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* Header */
+    .header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 32px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .nav {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+    }
+
+    .nav a {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .nav a:hover, .nav a.active { color: var(--text); }
+
+    /* Main */
+    .main {
+      padding: 32px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .page-title {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .page-subtitle {
+      color: var(--text-dim);
+      margin-bottom: 32px;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Form Elements */
+    .form-grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 140px 1fr 100px;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 16px;
+      background: var(--surface-2);
+      border-radius: 8px;
+    }
+
+    .form-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 10px 14px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .form-input::placeholder {
+      color: var(--text-dim);
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+
+    .btn-primary:hover { background: var(--accent-hover); }
+
+    .btn-secondary {
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover { background: var(--border); }
+
+    .btn-success {
+      background: var(--green);
+      color: black;
+    }
+
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Status Badge */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .status-badge.success {
+      background: rgba(70, 211, 105, 0.2);
+      color: var(--green);
+    }
+
+    .status-badge.error {
+      background: rgba(229, 9, 20, 0.2);
+      color: var(--accent);
+    }
+
+    .status-badge.pending {
+      background: rgba(136, 136, 136, 0.2);
+      color: var(--text-dim);
+    }
+
+    /* Integration Row */
+    .integration-row {
+      display: grid;
+      grid-template-columns: 120px 1fr auto;
+      gap: 16px;
+      align-items: center;
+      padding: 16px;
+      background: var(--surface-2);
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+
+    .integration-name {
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .integration-fields {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .integration-field {
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .integration-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    /* Feedback */
+    .feedback {
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-top: 16px;
+    }
+
+    .feedback.success {
+      background: rgba(70, 211, 105, 0.15);
+      color: var(--green);
+    }
+
+    .feedback.error {
+      background: rgba(229, 9, 20, 0.15);
+      color: var(--accent);
+    }
+
+    /* Seen Movies Section */
+    .seen-controls {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .seen-list {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .seen-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: var(--surface-2);
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+
+    .seen-item-info {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .seen-item-title {
+      font-weight: 500;
+    }
+
+    .seen-item-meta {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .plex-library {
+      max-height: 300px;
+      overflow-y: auto;
+      margin-bottom: 16px;
+    }
+
+    .plex-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 12px;
+      background: var(--surface-2);
+      border-radius: 6px;
+      margin-bottom: 6px;
+      cursor: pointer;
+    }
+
+    .plex-item:hover {
+      background: var(--border);
+    }
+
+    .plex-item.selected {
+      background: rgba(229, 9, 20, 0.2);
+      border: 1px solid var(--accent);
+    }
+
+    .plex-item input[type="checkbox"] {
+      accent-color: var(--accent);
+    }
+
+    /* Two Column Layout */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 900px) {
+      .two-col {
+        grid-template-columns: 1fr;
+      }
+      .integration-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <a href="/" class="logo">{{ app_title }}</a>
+    <nav class="nav">
+      <a href="/">Movies</a>
+      <a href="/usenet">Usenet</a>
+      <a href="/integrations" class="active">Settings</a>
+    </nav>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main">
+    <h1 class="page-title">Settings</h1>
+    <p class="page-subtitle">Configure integrations and manage your watched movies</p>
+
+    <!-- Integration Settings -->
+    <div class="card">
+      <div class="card-title">
+        <span>Integrations</span>
+        <button class="btn btn-primary" id="save-settings">Save All Settings</button>
+      </div>
+
+      <div id="integration-list">
+        <!-- Integrations will be loaded here -->
+      </div>
+
+      <div id="settings-feedback"></div>
+    </div>
+
+    <div class="two-col">
+      <!-- Seen Movies -->
+      <div class="card">
+        <div class="card-title">
+          <span>Seen Movies</span>
+          <button class="btn btn-secondary btn-sm" id="refresh-seen">Refresh</button>
+        </div>
+
+        <div class="seen-controls">
+          <input type="text" class="form-input" id="seen-search" placeholder="Search seen movies..." style="flex:1;">
+          <button class="btn btn-secondary" id="import-plex">Import from Plex</button>
+        </div>
+
+        <div id="seen-feedback"></div>
+        <div class="seen-list" id="seen-list">
+          <p style="color: var(--text-dim); text-align: center; padding: 20px;">Loading...</p>
+        </div>
+      </div>
+
+      <!-- Add Movie Manually -->
+      <div class="card">
+        <div class="card-title">Add Movie Manually</div>
+
+        <form id="manual-form">
+          <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+            <input type="text" class="form-input" id="manual-title" placeholder="Movie title" required style="flex: 2;">
+            <input type="number" class="form-input" id="manual-year" placeholder="Year" min="1888" max="2100" style="flex: 1;">
+          </div>
+          <button type="submit" class="btn btn-primary">Add to Seen List</button>
+        </form>
+
+        <div style="margin-top: 24px;">
+          <div class="card-title" style="margin-bottom: 12px;">
+            <span>Plex Library</span>
+            <button class="btn btn-secondary btn-sm" id="load-plex">Load Library</button>
+          </div>
+          <div class="plex-library" id="plex-library">
+            <p style="color: var(--text-dim); text-align: center; padding: 20px;">Click "Load Library" to see your Plex movies</p>
+          </div>
+          <button class="btn btn-success" id="add-selected-plex" style="width: 100%; margin-top: 12px;">Add Selected to Seen</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const INTEGRATIONS = [
+      { key: 'tmdb', label: 'TMDB', fields: [{ name: 'tmdb_api_key', label: 'API Key', type: 'password' }] },
+      { key: 'rottentomatoes', label: 'Rotten Tomatoes', fields: [{ name: 'rottentomatoes_list_url', label: 'List URL', type: 'text' }] },
+      { key: 'rogerebert', label: 'RogerEbert', fields: [{ name: 'rogerebert_reviews_url', label: 'Reviews URL', type: 'text' }] },
+      { key: 'releases', label: 'Releases', fields: [{ name: 'releases_url', label: 'URL', type: 'text' }] },
+      { key: 'plex', label: 'Plex', fields: [
+        { name: 'plex_base_url', label: 'Base URL', type: 'text' },
+        { name: 'plex_token', label: 'Token', type: 'password' }
+      ]},
+      { key: 'radarr', label: 'Radarr', fields: [
+        { name: 'radarr_base_url', label: 'Base URL', type: 'text' },
+        { name: 'radarr_api_key', label: 'API Key', type: 'password' }
+      ]},
+      { key: 'nzbgeek', label: 'NZBGeek', fields: [
+        { name: 'nzbgeek_rss_url', label: 'RSS URL', type: 'text' },
+        { name: 'nzbgeek_api_key', label: 'API Key', type: 'password' }
+      ]},
+      { key: 'drunkenslug', label: 'DrunkenSlug', fields: [
+        { name: 'drunkenslug_base_url', label: 'Base URL', type: 'text' },
+        { name: 'drunkenslug_api_key', label: 'API Key', type: 'password' }
+      ]},
+      { key: 'usenet', label: 'Usenet/NZBHydra', fields: [
+        { name: 'usenet_base_url', label: 'Base URL', type: 'text' },
+        { name: 'usenet_api_key', label: 'API Key', type: 'password' }
+      ]}
+    ];
+
+    let currentSettings = {};
+    let integrationStatus = {};
+
+    function getUserId() {
+      let id = localStorage.getItem('majic_user_id');
+      if (!id) {
+        id = 'user-' + Math.random().toString(36).slice(2);
+        localStorage.setItem('majic_user_id', id);
+      }
+      return id;
+    }
+
+    async function loadSettings() {
+      try {
+        const [settingsRes, statusRes] = await Promise.all([
+          fetch('/api/settings'),
+          fetch('/api/integrations')
+        ]);
+        const settingsData = await settingsRes.json();
+        const statusData = await statusRes.json();
+
+        currentSettings = settingsData.values || {};
+        integrationStatus = statusData;
+
+        renderIntegrations();
+      } catch (e) {
+        console.error('Failed to load settings:', e);
+      }
+    }
+
+    function renderIntegrations() {
+      const container = document.getElementById('integration-list');
+      container.innerHTML = INTEGRATIONS.map(int => {
+        const isActive = integrationStatus[int.key];
+        const statusClass = isActive ? 'success' : 'pending';
+        const statusText = isActive ? 'Connected' : 'Not configured';
+
+        return `
+          <div class="integration-row">
+            <div>
+              <div class="integration-name">${int.label}</div>
+              <span class="status-badge ${statusClass}">${statusText}</span>
+            </div>
+            <div class="integration-fields">
+              ${int.fields.map(field => `
+                <div class="integration-field">
+                  <input type="${field.type}" class="form-input"
+                         id="${field.name}"
+                         placeholder="${field.label}"
+                         value="${currentSettings[field.name] || ''}">
+                </div>
+              `).join('')}
+            </div>
+            <div class="integration-actions">
+              <button class="btn btn-secondary btn-sm" onclick="testIntegration('${int.key}')">Test</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function testIntegration(key) {
+      const values = {};
+      INTEGRATIONS.forEach(int => {
+        int.fields.forEach(field => {
+          const el = document.getElementById(field.name);
+          if (el) values[field.name] = el.value;
+        });
+      });
+
+      try {
+        const res = await fetch('/api/integrations/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ integration: key, values })
+        });
+        const data = await res.json();
+
+        showFeedback('settings-feedback', data.ok ? data.message : `Error: ${data.message}`, data.ok);
+      } catch (e) {
+        showFeedback('settings-feedback', 'Test failed: ' + e.message, false);
+      }
+    }
+
+    async function saveSettings() {
+      const values = {};
+      INTEGRATIONS.forEach(int => {
+        int.fields.forEach(field => {
+          const el = document.getElementById(field.name);
+          if (el) values[field.name] = el.value;
+        });
+      });
+
+      try {
+        const res = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(values)
+        });
+        const data = await res.json();
+
+        if (data.status === 'ok') {
+          currentSettings = data.values;
+          showFeedback('settings-feedback', 'Settings saved. Testing connections...', true);
+
+          // Test each configured integration to get real status
+          const testResults = {};
+          for (const int of INTEGRATIONS) {
+            const hasValue = int.fields.some(f => values[f.name] && values[f.name].trim());
+            if (!hasValue) {
+              testResults[int.key] = false;
+              continue;
+            }
+            try {
+              const testRes = await fetch('/api/integrations/test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ integration: int.key, values })
+              });
+              const testData = await testRes.json();
+              testResults[int.key] = testData.ok;
+              if (!testData.ok) {
+                showFeedback('settings-feedback', `${int.label}: ${testData.message || 'Failed'}`, false);
+              }
+            } catch {
+              testResults[int.key] = false;
+            }
+          }
+          integrationStatus = testResults;
+          renderIntegrations();
+
+          const passed = Object.values(testResults).filter(Boolean).length;
+          const total = Object.values(testResults).length;
+          showFeedback('settings-feedback', `Saved. ${passed}/${total} integrations verified.`, passed > 0);
+        } else {
+          showFeedback('settings-feedback', 'Failed to save settings', false);
+        }
+      } catch (e) {
+        showFeedback('settings-feedback', 'Save failed: ' + e.message, false);
+      }
+    }
+
+    function showFeedback(elementId, message, success) {
+      const el = document.getElementById(elementId);
+      el.className = `feedback ${success ? 'success' : 'error'}`;
+      el.textContent = message;
+      setTimeout(() => { el.textContent = ''; el.className = ''; }, 5000);
+    }
+
+    // Seen Movies
+    async function loadSeenMovies() {
+      const search = document.getElementById('seen-search').value;
+      try {
+        const res = await fetch(`/api/seen/${getUserId()}?limit=500${search ? '&q=' + encodeURIComponent(search) : ''}`);
+        const data = await res.json();
+
+        const container = document.getElementById('seen-list');
+        if (!data.length) {
+          container.innerHTML = '<p style="color: var(--text-dim); text-align: center; padding: 20px;">No seen movies yet</p>';
+          return;
+        }
+
+        container.innerHTML = data.slice(0, 100).map(movie => `
+          <div class="seen-item">
+            <div class="seen-item-info">
+              <span class="seen-item-title">${movie.title}</span>
+              <span class="seen-item-meta">${movie.year || ''} • ${movie.source || 'manual'}</span>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="removeSeen('${movie.movie_id}')">Remove</button>
+          </div>
+        `).join('');
+      } catch (e) {
+        console.error('Failed to load seen movies:', e);
+      }
+    }
+
+    async function removeSeen(movieId) {
+      try {
+        await fetch('/api/seen', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: getUserId(), movie_id: movieId })
+        });
+        loadSeenMovies();
+      } catch (e) {
+        console.error('Failed to remove:', e);
+      }
+    }
+
+    async function importFromPlex() {
+      const btn = document.getElementById('import-plex');
+      btn.disabled = true;
+      btn.textContent = 'Importing...';
+
+      try {
+        const res = await fetch(`/api/seen/import/plex?user_id=${getUserId()}`, { method: 'POST' });
+        const data = await res.json();
+
+        if (data.ok) {
+          showFeedback('seen-feedback', `Imported ${data.imported} movies from Plex`, true);
+          loadSeenMovies();
+        } else {
+          showFeedback('seen-feedback', data.message || 'Import failed', false);
+        }
+      } catch (e) {
+        showFeedback('seen-feedback', 'Import failed: ' + e.message, false);
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Import from Plex';
+    }
+
+    // Manual Add
+    document.getElementById('manual-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const title = document.getElementById('manual-title').value.trim();
+      const year = document.getElementById('manual-year').value;
+
+      if (!title) return;
+
+      try {
+        await fetch('/api/seen', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: getUserId(),
+            movie_id: `manual:${title.toLowerCase().replace(/\s+/g, '_')}:${year || 'na'}`,
+            title,
+            year: year ? parseInt(year) : null,
+            source: 'manual'
+          })
+        });
+
+        document.getElementById('manual-title').value = '';
+        document.getElementById('manual-year').value = '';
+        loadSeenMovies();
+      } catch (e) {
+        console.error('Failed to add:', e);
+      }
+    };
+
+    // Plex Library
+    let plexMovies = [];
+    let selectedPlex = new Set();
+
+    async function loadPlexLibrary() {
+      const btn = document.getElementById('load-plex');
+      btn.disabled = true;
+      btn.textContent = 'Loading...';
+
+      try {
+        const res = await fetch('/api/plex/library?limit=500');
+        const data = await res.json();
+
+        if (!data.ok) {
+          document.getElementById('plex-library').innerHTML = `<p style="color: var(--accent); padding: 20px;">${data.message || 'Failed to load'}</p>`;
+          btn.disabled = false;
+          btn.textContent = 'Load Library';
+          return;
+        }
+
+        plexMovies = data.movies || [];
+        selectedPlex.clear();
+        renderPlexLibrary();
+      } catch (e) {
+        console.error('Failed to load Plex:', e);
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Load Library';
+    }
+
+    function renderPlexLibrary() {
+      const container = document.getElementById('plex-library');
+      if (!plexMovies.length) {
+        container.innerHTML = '<p style="color: var(--text-dim); padding: 20px;">No movies found</p>';
+        return;
+      }
+
+      container.innerHTML = plexMovies.slice(0, 100).map(movie => `
+        <div class="plex-item ${selectedPlex.has(movie.movie_id) ? 'selected' : ''}" onclick="togglePlexSelect('${movie.movie_id}')">
+          <input type="checkbox" ${selectedPlex.has(movie.movie_id) ? 'checked' : ''}>
+          <span>${movie.title} ${movie.year ? `(${movie.year})` : ''}</span>
+        </div>
+      `).join('');
+    }
+
+    function togglePlexSelect(movieId) {
+      if (selectedPlex.has(movieId)) selectedPlex.delete(movieId);
+      else selectedPlex.add(movieId);
+      renderPlexLibrary();
+    }
+
+    async function addSelectedPlex() {
+      if (!selectedPlex.size) return;
+
+      const btn = document.getElementById('add-selected-plex');
+      btn.disabled = true;
+      btn.textContent = 'Adding...';
+
+      for (const movieId of selectedPlex) {
+        const movie = plexMovies.find(m => m.movie_id === movieId);
+        if (!movie) continue;
+
+        try {
+          await fetch('/api/seen', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user_id: getUserId(),
+              movie_id: movie.movie_id,
+              title: movie.title,
+              year: movie.year,
+              source: 'plex'
+            })
+          });
+        } catch (e) { /* ignore */ }
+      }
+
+      selectedPlex.clear();
+      renderPlexLibrary();
+      loadSeenMovies();
+
+      btn.disabled = false;
+      btn.textContent = 'Add Selected to Seen';
+    }
+
+    // Event Listeners
+    document.getElementById('save-settings').onclick = saveSettings;
+    document.getElementById('refresh-seen').onclick = loadSeenMovies;
+    document.getElementById('import-plex').onclick = importFromPlex;
+    document.getElementById('load-plex').onclick = loadPlexLibrary;
+    document.getElementById('add-selected-plex').onclick = addSelectedPlex;
+    document.getElementById('seen-search').oninput = () => {
+      clearTimeout(window.seenSearchTimer);
+      window.seenSearchTimer = setTimeout(loadSeenMovies, 300);
+    };
+
+    // Initialize
+    loadSettings();
+    loadSeenMovies();
+  </script>
+</body>
+</html>

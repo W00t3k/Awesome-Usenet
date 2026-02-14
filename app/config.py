@@ -9,19 +9,39 @@ class Settings(BaseSettings):
     app_port: int = Field(default=8080, alias="APP_PORT")
     app_title: str = Field(default="Majic Movie Selector", alias="APP_TITLE")
 
-    openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
-    openai_model: str = Field(default="gpt-4.1-mini", alias="OPENAI_MODEL")
-    openai_embedding_model: str = Field(
-        default="text-embedding-3-small", alias="OPENAI_EMBEDDING_MODEL"
-    )
-
     tmdb_api_key: str | None = Field(default=None, alias="TMDB_API_KEY")
+    rottentomatoes_list_url: str | None = Field(
+        default="https://www.rottentomatoes.com/browse/movies_at_home/sort:popular",
+        alias="ROTTENTOMATOES_LIST_URL",
+    )
+    releases_url: str | None = Field(
+        default="https://www.releases.com/calendar/movies/upcoming",
+        alias="RELEASES_URL",
+    )
+    rogerebert_reviews_url: str | None = Field(
+        default="https://www.rogerebert.com/reviews",
+        alias="ROGEREBERT_REVIEWS_URL",
+    )
 
     plex_base_url: str = Field(default="http://localhost:32400", alias="PLEX_BASE_URL")
     plex_token: str | None = Field(default=None, alias="PLEX_TOKEN")
 
     radarr_base_url: str = Field(default="http://localhost:7878", alias="RADARR_BASE_URL")
     radarr_api_key: str | None = Field(default=None, alias="RADARR_API_KEY")
+
+    nzbgeek_rss_url: str | None = Field(
+        default=(
+            "https://api.nzbgeek.info/rss?t=search&cat=2000&apikey={API_KEY}"
+        ),
+        alias="NZBGEEK_RSS_URL",
+    )
+    nzbgeek_api_key: str | None = Field(default=None, alias="NZBGEEK_API_KEY")
+
+    drunkenslug_base_url: str = Field(
+        default="https://drunkenslug.com/api",
+        alias="DRUNKENSLUG_BASE_URL",
+    )
+    drunkenslug_api_key: str | None = Field(default=None, alias="DRUNKENSLUG_API_KEY")
 
     usenet_base_url: str = Field(default="http://localhost:5076", alias="USENET_BASE_URL")
     usenet_api_key: str | None = Field(default=None, alias="USENET_API_KEY")

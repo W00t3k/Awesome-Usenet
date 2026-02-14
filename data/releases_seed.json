@@ -1,0 +1,34 @@
+[
+  {
+    "position": 1,
+    "title": "Mickey 17",
+    "year": 2026,
+    "release_date": "2026-03-07",
+    "overview": "A high-concept sci-fi adaptation directed by Bong Joon-ho.",
+    "url": "https://www.releases.com/p/mickey-17"
+  },
+  {
+    "position": 2,
+    "title": "Mission: Impossible - Final Reckoning",
+    "year": 2026,
+    "release_date": "2026-05-23",
+    "overview": "Ethan Hunt returns for a globe-spanning espionage finale.",
+    "url": "https://www.releases.com/p/mission-impossible-final-reckoning"
+  },
+  {
+    "position": 3,
+    "title": "Avatar: Fire and Ash",
+    "year": 2026,
+    "release_date": "2026-12-18",
+    "overview": "A new chapter in the Avatar saga with a darker Na'vi conflict.",
+    "url": "https://www.releases.com/p/avatar-fire-and-ash"
+  },
+  {
+    "position": 4,
+    "title": "The Last Projectionist",
+    "year": 2026,
+    "release_date": "2026-04-17",
+    "overview": "A retiring projectionist discovers a reel that rewrites cinema history.",
+    "url": "https://www.releases.com/p/the-last-projectionist"
+  }
+]

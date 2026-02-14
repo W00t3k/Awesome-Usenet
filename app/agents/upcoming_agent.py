@@ -8,6 +8,14 @@ from app.clients.tmdb_client import TMDBClient
 from app.models import AgentContext, MovieCandidate, SourcePayload
 
 
+TMDB_GENRE_MAP: dict[int, str] = {
+    28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy", 80: "Crime",
+    99: "Documentary", 18: "Drama", 10751: "Family", 14: "Fantasy", 36: "History",
+    27: "Horror", 10402: "Music", 9648: "Mystery", 10749: "Romance",
+    878: "Sci-Fi", 10770: "TV Movie", 53: "Thriller", 10752: "War", 37: "Western",
+}
+
+
 class UpcomingAgent(MovieAgent):
     name = "upcoming"
 
@@ -51,12 +59,25 @@ class UpcomingAgent(MovieAgent):
         if row.get("release_date"):
             year = int(str(row["release_date"])[:4])
 
+        poster_url = row.get("poster_url")
+        poster_path = row.get("poster_path")
+        if not poster_url and isinstance(poster_path, str) and poster_path:
+            poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}"
+
+        genres = [
+            TMDB_GENRE_MAP[gid]
+            for gid in (row.get("genre_ids") or [])
+            if isinstance(gid, int) and gid in TMDB_GENRE_MAP
+        ]
+
         return MovieCandidate(
             movie_id=f"{prefix}:{movie_id}",
             title=title,
             year=year,
             release_date=row.get("release_date"),
+            poster_url=poster_url,
             overview=row.get("overview"),
+            genres=genres,
             source_tags=["upcoming"],
             evidence=[f"Upcoming release: {row.get('release_date', 'unknown date')}"]
             if row.get("release_date")

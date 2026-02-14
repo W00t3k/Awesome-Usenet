@@ -9,6 +9,9 @@ class MovieCandidate(BaseModel):
     title: str
     year: int | None = None
     release_date: str | None = None
+    poster_url: str | None = None
+    rottentomatoes_score: int | None = None
+    rogerebert_score: float | None = None
     genres: list[str] = Field(default_factory=list)
     overview: str | None = None
     source_tags: list[str] = Field(default_factory=list)
@@ -66,6 +69,30 @@ class FeedbackRow(BaseModel):
     genres: list[str] = Field(default_factory=list)
     year: int | None = None
     created_at: str
+
+
+class SeenMovieInput(BaseModel):
+    user_id: str = "default"
+    movie_id: str
+    title: str
+    year: int | None = None
+    source: str = "manual"
+
+
+class SeenMovieDeleteInput(BaseModel):
+    user_id: str = "default"
+    movie_id: str
+
+
+class SeenMovieRow(BaseModel):
+    id: int
+    user_id: str
+    movie_id: str
+    title: str
+    year: int | None = None
+    source: str
+    created_at: str
+    updated_at: str
 
 
 class AgentContext(BaseModel):

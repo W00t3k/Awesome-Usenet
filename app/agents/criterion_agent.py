@@ -23,9 +23,11 @@ class CriterionAgent(MovieAgent):
             title = row.get("title")
             if not title:
                 continue
+            raw_identifier = row.get("spine", title)
+            normalized_identifier = str(raw_identifier).replace(" ", "_").lower()
             movies.append(
                 MovieCandidate(
-                    movie_id=f"criterion:{row.get('spine', title).replace(' ', '_').lower()}",
+                    movie_id=f"criterion:{normalized_identifier}",
                     title=title,
                     year=row.get("year"),
                     genres=row.get("genres", []),

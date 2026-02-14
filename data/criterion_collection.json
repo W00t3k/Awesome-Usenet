@@ -1,0 +1,58 @@
+[
+  {
+    "spine": 1,
+    "title": "Grand Illusion",
+    "year": 1937,
+    "genres": ["Drama", "War"],
+    "overview": "A classic anti-war drama about French prisoners during World War I."
+  },
+  {
+    "spine": 2,
+    "title": "Seven Samurai",
+    "year": 1954,
+    "genres": ["Action", "Drama"],
+    "overview": "A group of samurai defend a village from bandits."
+  },
+  {
+    "spine": 36,
+    "title": "The Third Man",
+    "year": 1949,
+    "genres": ["Noir", "Thriller"],
+    "overview": "Noir mystery set in postwar Vienna."
+  },
+  {
+    "spine": 470,
+    "title": "The Red Shoes",
+    "year": 1948,
+    "genres": ["Drama", "Music"],
+    "overview": "A visually rich ballet melodrama."
+  },
+  {
+    "spine": 634,
+    "title": "Paris, Texas",
+    "year": 1984,
+    "genres": ["Drama"],
+    "overview": "A drifter reconnects with his past in the American Southwest."
+  },
+  {
+    "spine": 1017,
+    "title": "Parasite",
+    "year": 2019,
+    "genres": ["Thriller", "Drama"],
+    "overview": "A darkly comic thriller about class conflict in Seoul."
+  },
+  {
+    "spine": 1138,
+    "title": "Dazed and Confused",
+    "year": 1993,
+    "genres": ["Comedy", "Coming-of-age"],
+    "overview": "A snapshot of one day in 1970s Texas youth culture."
+  },
+  {
+    "spine": 1183,
+    "title": "The Heroic Trio",
+    "year": 1993,
+    "genres": ["Action", "Fantasy"],
+    "overview": "High-energy Hong Kong superhero action film."
+  }
+]

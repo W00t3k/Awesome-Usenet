@@ -1,0 +1,42 @@
+[
+  {
+    "year": 2025,
+    "winner": "Anora",
+    "nominees": ["The Brutalist", "A Complete Unknown", "Conclave", "Dune: Part Two"]
+  },
+  {
+    "year": 2024,
+    "winner": "Oppenheimer",
+    "nominees": ["American Fiction", "Anatomy of a Fall", "Barbie", "The Holdovers"]
+  },
+  {
+    "year": 2023,
+    "winner": "Everything Everywhere All at Once",
+    "nominees": ["All Quiet on the Western Front", "Avatar: The Way of Water", "The Banshees of Inisherin", "Tar"]
+  },
+  {
+    "year": 2022,
+    "winner": "CODA",
+    "nominees": ["Belfast", "Dune", "Drive My Car", "The Power of the Dog"]
+  },
+  {
+    "year": 2021,
+    "winner": "Nomadland",
+    "nominees": ["The Father", "Judas and the Black Messiah", "Minari", "Sound of Metal"]
+  },
+  {
+    "year": 2020,
+    "winner": "Parasite",
+    "nominees": ["1917", "Ford v Ferrari", "Joker", "Little Women", "Marriage Story"]
+  },
+  {
+    "year": 2019,
+    "winner": "Green Book",
+    "nominees": ["Black Panther", "BlacKkKlansman", "Bohemian Rhapsody", "The Favourite", "Roma"]
+  },
+  {
+    "year": 2018,
+    "winner": "The Shape of Water",
+    "nominees": ["Call Me by Your Name", "Dunkirk", "Get Out", "Lady Bird", "Phantom Thread"]
+  }
+]

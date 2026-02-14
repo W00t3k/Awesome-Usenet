@@ -9,6 +9,8 @@ class PlexAgent(MovieAgent):
     name = "plex"
 
     def __init__(self, base_url: str, token: str | None, timeout_seconds: float):
+        self._base_url = base_url.rstrip("/")
+        self._token = token
         self._client = (
             PlexClient(base_url=base_url, token=token, timeout_seconds=timeout_seconds)
             if token
@@ -25,11 +27,16 @@ class PlexAgent(MovieAgent):
             title = row.get("title")
             if not title:
                 continue
+            poster_url = None
+            thumb = row.get("thumb")
+            if isinstance(thumb, str) and thumb and self._token:
+                poster_url = f"{self._base_url}{thumb}?X-Plex-Token={self._token}"
             movies.append(
                 MovieCandidate(
                     movie_id=f"plex:{row.get('ratingKey', title.lower().replace(' ', '_'))}",
                     title=title,
                     year=row.get("year"),
+                    poster_url=poster_url,
                     overview=row.get("summary"),
                     source_tags=["plex"],
                     evidence=["Already in Plex library"],

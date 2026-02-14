@@ -30,3 +30,25 @@ class HTTPClient:
             response = await client.get(url, params=params, headers=headers)
             response.raise_for_status()
             return response.text
+
+    async def post_json(
+        self,
+        url: str,
+        payload: dict[str, Any] | list[Any],
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> Any:
+        async with httpx.AsyncClient(timeout=self._timeout) as client:
+            response = await client.post(url, params=params, headers=headers, json=payload)
+            response.raise_for_status()
+            return response.json()
+
+    async def delete(
+        self,
+        url: str,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        async with httpx.AsyncClient(timeout=self._timeout) as client:
+            response = await client.delete(url, params=params, headers=headers)
+            response.raise_for_status()

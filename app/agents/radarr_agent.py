@@ -25,13 +25,26 @@ class RadarrAgent(MovieAgent):
             title = row.get("title")
             if not title:
                 continue
+            poster_url = None
+            for image in row.get("images", []):
+                if image.get("coverType") != "poster":
+                    continue
+                candidate = image.get("remoteUrl") or image.get("url")
+                if isinstance(candidate, str) and candidate:
+                    poster_url = candidate
+                    break
+            raw_genres = row.get("genres", [])
+            genres = [str(g) for g in raw_genres if isinstance(g, str)] if isinstance(raw_genres, list) else []
+
             movies.append(
                 MovieCandidate(
                     movie_id=f"radarr:{row.get('id', title.lower().replace(' ', '_'))}",
                     title=title,
                     year=row.get("year"),
                     release_date=row.get("inCinemas") or row.get("digitalRelease"),
+                    poster_url=poster_url,
                     overview=row.get("overview"),
+                    genres=genres,
                     source_tags=["radarr"],
                     evidence=["Tracked in Radarr"],
                     available_on_radarr=True,

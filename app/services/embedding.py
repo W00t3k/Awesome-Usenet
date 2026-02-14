@@ -6,29 +6,16 @@ import re
 from typing import Sequence
 
 import numpy as np
-from openai import AsyncOpenAI
 
 
 class EmbeddingService:
-    def __init__(
-        self,
-        openai_api_key: str | None,
-        openai_model: str,
-        dim: int = 384,
-    ):
-        self._client = AsyncOpenAI(api_key=openai_api_key) if openai_api_key else None
-        self._model = openai_model
+    def __init__(self, dim: int = 384):
         self._dim = dim
 
     async def embed(self, text: str) -> list[float]:
         cleaned = text.strip()
         if not cleaned:
             return [0.0] * self._dim
-
-        if self._client:
-            response = await self._client.embeddings.create(model=self._model, input=cleaned)
-            vector = response.data[0].embedding
-            return vector
 
         return self._local_hash_embedding(cleaned)
 
