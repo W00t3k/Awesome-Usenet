@@ -35,7 +35,7 @@ const SETTINGS_SCHEMA = [
   {
     integration: "releases",
     label: "Releases.com",
-    fields: [{ name: "releases_url", label: "Page URL", type: "text", placeholder: "https://www.releases.com/" }],
+    fields: [{ name: "releases_url", label: "Page URL", type: "text", placeholder: "https://www.releases.com/calendar/movie" }],
   },
   {
     integration: "rogerebert",
@@ -59,10 +59,10 @@ const SETTINGS_SCHEMA = [
   },
   {
     integration: "radarr",
-    label: "Radarr",
+    label: "Downloader",
     fields: [
-      { name: "radarr_base_url", label: "Base URL", type: "text", placeholder: "http://localhost:7878" },
-      { name: "radarr_api_key", label: "API Key", type: "password", placeholder: "Enter Radarr API key" },
+      { name: "radarr_base_url", label: "Service URL", type: "text", placeholder: "http://localhost:7878" },
+      { name: "radarr_api_key", label: "API Key", type: "password", placeholder: "Enter downloader API key" },
     ],
   },
   {
@@ -104,6 +104,14 @@ const SETTINGS_SCHEMA = [
       { name: "usenet_api_key", label: "API Key", type: "password", placeholder: "Enter API key" },
     ],
   },
+  {
+    integration: "ollama",
+    label: "Ollama (AI)",
+    fields: [
+      { name: "ollama_base_url", label: "Base URL", type: "text", placeholder: "http://localhost:11434" },
+      { name: "ollama_model", label: "Model", type: "text", placeholder: "llama3.2" },
+    ],
+  },
 ];
 
 const settingsRows = new Map();
@@ -140,8 +148,9 @@ function renderStatusBadges(data) {
     rogerebert: "RogerEbert",
     tmdb: "TMDB",
     plex: "Plex",
-    radarr: "Radarr",
+    radarr: "Downloader",
     usenet: "Usenet",
+    ollama: "Ollama",
   };
   Object.entries(data).forEach(([name, active]) => {
     const badge = document.createElement("span");

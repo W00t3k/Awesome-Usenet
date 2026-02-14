@@ -51,6 +51,7 @@ class SwarmOrchestrator:
         return await self.recommend_filtered(
             user_id=user_id,
             count=count,
+            sort_mode=None,
             required_sources=None,
             release_date_from=None,
             release_date_to=None,
@@ -98,6 +99,7 @@ class SwarmOrchestrator:
         self,
         user_id: str,
         count: int,
+        sort_mode: str | None,
         required_sources: set[str] | None,
         release_date_from: date | None,
         release_date_to: date | None,
@@ -111,10 +113,13 @@ class SwarmOrchestrator:
             if tmdb_movies:
                 source_movies["tmdb-discover"] = tmdb_movies
 
+        await self._enrich_source_posters(source_movies, max_items=300)
+
         recommendations = await self._recommender.rank(
             user_id=user_id,
             source_movies=source_movies,
             top_n=count,
+            sort_mode=sort_mode,
             required_sources=required_sources,
             release_date_from=release_date_from,
             release_date_to=release_date_to,
@@ -130,30 +135,117 @@ class SwarmOrchestrator:
             agents=agent_statuses,
         )
 
+    @staticmethod
+    def _is_placeholder_url(url: str | None) -> bool:
+        if not url:
+            return True
+        lower = url.lower()
+        return "example.com" in lower or "placeholder" in lower or "no-image" in lower
+
     async def _enrich_posters(self, recommendations: list) -> None:
         if not self._poster_lookup_client:
             return
 
+        semaphore = asyncio.Semaphore(10)
+
         async def enrich(movie: MovieCandidate) -> None:
-            needs_poster = not movie.poster_url
+            needs_poster = self._is_placeholder_url(movie.poster_url)
             needs_overview = not movie.overview
             needs_genres = not movie.genres
             if not needs_poster and not needs_overview and not needs_genres:
                 return
-            try:
-                info = await self._poster_lookup_client.lookup(movie.title, movie.year)
-            except Exception:  # noqa: BLE001
-                return
-            if not info:
-                return
-            if needs_poster and info.get("poster_url"):
-                movie.poster_url = info["poster_url"]
-            if needs_overview and info.get("overview"):
-                movie.overview = info["overview"]
-            if needs_genres and info.get("genre"):
-                movie.genres = [info["genre"]]
+            async with semaphore:
+                try:
+                    info = await self._poster_lookup_client.lookup(movie.title, movie.year)
+                except Exception:  # noqa: BLE001
+                    return
+                if not info:
+                    return
+                if needs_poster and info.get("poster_url"):
+                    movie.poster_url = info["poster_url"]
+                if needs_overview and info.get("overview"):
+                    movie.overview = info["overview"]
+                if needs_genres:
+                    # Prefer full genres list from TMDB
+                    if info.get("genres"):
+                        movie.genres = info["genres"]
+                    elif info.get("genre"):
+                        movie.genres = [info["genre"]]
 
         await asyncio.gather(*(enrich(rec.movie) for rec in recommendations))
+
+    async def _enrich_source_posters(
+        self, source_movies: dict[str, list[MovieCandidate]], max_items: int = 80,
+    ) -> None:
+        if not self._poster_lookup_client:
+            return
+
+        needs_enrichment: list[MovieCandidate] = []
+        for movies in source_movies.values():
+            for movie in movies:
+                if self._is_placeholder_url(movie.poster_url):
+                    needs_enrichment.append(movie)
+
+        if not needs_enrichment:
+            return
+
+        semaphore = asyncio.Semaphore(10)
+
+        async def enrich(movie: MovieCandidate) -> None:
+            async with semaphore:
+                try:
+                    info = await self._poster_lookup_client.lookup(movie.title, movie.year)
+                except Exception:  # noqa: BLE001
+                    return
+                if not info:
+                    return
+                if self._is_placeholder_url(movie.poster_url) and info.get("poster_url"):
+                    movie.poster_url = info["poster_url"]
+                if not movie.overview and info.get("overview"):
+                    movie.overview = info["overview"]
+                if not movie.genres:
+                    # Prefer full genres list from TMDB
+                    if info.get("genres"):
+                        movie.genres = info["genres"]
+                    elif info.get("genre"):
+                        movie.genres = [info["genre"]]
+
+        await asyncio.gather(*(enrich(m) for m in needs_enrichment[:max_items]))
+
+    async def fetch_movies_for_year(self, year: int, max_pages: int = 10) -> list[MovieCandidate]:
+        """Fetch ALL movies from TMDB for a specific year."""
+        if not self._tmdb_client:
+            return []
+
+        try:
+            results = await self._tmdb_client.discover_movies_for_year(
+                year=year, max_pages=max_pages
+            )
+            candidates: list[MovieCandidate] = []
+            for m in results:
+                release = m.get("release_date") or ""
+                movie_year = int(release[:4]) if len(release) >= 4 else year
+                poster_path = m.get("poster_path")
+                poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else None
+                vote_avg = m.get("vote_average") or 0
+                rt_score = max(0, min(100, int(vote_avg * 10))) if vote_avg else None
+                tmdb_id = m.get("id") or 0
+
+                candidates.append(MovieCandidate(
+                    movie_id=f"tmdb-year-{tmdb_id}",
+                    title=m.get("title") or "Unknown",
+                    year=movie_year,
+                    source_tags=["tmdb-discover", f"year-{year}"],
+                    evidence=[f"TMDB discover for {year}"],
+                    overview=m.get("overview") or "",
+                    poster_url=poster_url,
+                    release_date=release or None,
+                    rottentomatoes_score=rt_score,
+                    genres=[],
+                ))
+            return candidates
+        except Exception:  # noqa: BLE001
+            return []
 
     async def _run_agent(
         self,

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from datetime import UTC, date, datetime
+
+logger = logging.getLogger(__name__)
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Literal
@@ -12,7 +15,7 @@ from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.requests import Request
 
 from app.agents.criterion_agent import CriterionAgent
@@ -20,12 +23,12 @@ from app.agents.drunkenslug_agent import DrunkenSlugAgent
 from app.agents.oscar_agent import OscarAgent
 from app.agents.plex_agent import PlexAgent
 from app.agents.preference_agent import PreferenceAgent
-from app.agents.radarr_agent import RadarrAgent
 from app.agents.rogerebert_agent import RogerEbertAgent
 from app.agents.releases_agent import ReleasesAgent
 from app.agents.rottentomatoes_agent import RottenTomatoesAgent
 from app.agents.upcoming_agent import UpcomingAgent
 from app.agents.usenet_agent import UsenetAgent
+from app.clients.ollama_client import OllamaClient
 from app.clients.plex_client import PlexClient
 from app.clients.poster_lookup_client import PosterLookupClient
 from app.clients.radarr_client import RadarrClient
@@ -44,8 +47,12 @@ from app.models import (
     SeenMovieInput,
     SeenMovieRow,
 )
+from app.auth.dependencies import AdminUser, AuthenticatedUser
+from app.auth.router import auth_router, set_memory_store
 from app.services.embedding import EmbeddingService
+from app.services.llm_explainer import get_explainer
 from app.services.memory_store import MemoryStore
+from app.services.mood_engine import get_all_moods, get_mood, filter_movies_by_mood, infer_user_moods
 from app.services.recommender import Recommender
 from app.services.swarm import SwarmOrchestrator
 
@@ -59,16 +66,18 @@ load_dotenv(dotenv_path=env_path)
 
 DEFAULT_URLS: dict[str, str] = {
     "rottentomatoes_list_url": "https://www.rottentomatoes.com/browse/movies_at_home/sort:popular",
-    "releases_url": "https://www.releases.com/calendar/movies/upcoming",
+    "releases_url": "https://www.releases.com/calendar/movie",
     "rogerebert_reviews_url": "https://www.rogerebert.com/reviews",
     "plex_base_url": "http://localhost:32400",
     "radarr_base_url": "http://localhost:7878",
     "nzbgeek_rss_url": "https://api.nzbgeek.info/rss?t=search&cat=2000&apikey={API_KEY}",
     "drunkenslug_base_url": "https://drunkenslug.com/api",
     "usenet_base_url": "http://localhost:5076",
+    "ollama_base_url": "http://localhost:11434",
+    "ollama_model": "llama3.2:1b",
 }
 
-REQUIRED_URL_FIELDS = {"plex_base_url", "radarr_base_url", "drunkenslug_base_url", "usenet_base_url"}
+REQUIRED_URL_FIELDS = {"plex_base_url", "radarr_base_url", "drunkenslug_base_url", "usenet_base_url", "ollama_base_url"}
 
 ENV_KEY_MAP: dict[str, str] = {
     "tmdb_api_key": "TMDB_API_KEY",
@@ -85,6 +94,8 @@ ENV_KEY_MAP: dict[str, str] = {
     "drunkenslug_api_key": "DRUNKENSLUG_API_KEY",
     "usenet_base_url": "USENET_BASE_URL",
     "usenet_api_key": "USENET_API_KEY",
+    "ollama_base_url": "OLLAMA_BASE_URL",
+    "ollama_model": "OLLAMA_MODEL",
 }
 
 OPTIONAL_FIELDS = {
@@ -98,6 +109,7 @@ OPTIONAL_FIELDS = {
     "nzbgeek_api_key",
     "drunkenslug_api_key",
     "usenet_api_key",
+    "ollama_model",
 }
 
 
@@ -116,6 +128,8 @@ class IntegrationSettingsPayload(BaseModel):
     drunkenslug_api_key: str | None = None
     usenet_base_url: str | None = None
     usenet_api_key: str | None = None
+    ollama_base_url: str | None = None
+    ollama_model: str | None = None
 
 
 class IntegrationTestRequest(BaseModel):
@@ -129,6 +143,7 @@ class IntegrationTestRequest(BaseModel):
         "nzbgeek",
         "drunkenslug",
         "usenet",
+        "ollama",
     ]
     values: IntegrationSettingsPayload | None = None
 
@@ -167,7 +182,7 @@ def _to_public_settings_values() -> dict[str, str]:
     return {
         "tmdb_api_key": settings.tmdb_api_key or "",
         "rottentomatoes_list_url": settings.rottentomatoes_list_url or "",
-        "releases_url": settings.releases_url or "",
+        "releases_url": settings.releases_url or DEFAULT_URLS["releases_url"],
         "rogerebert_reviews_url": settings.rogerebert_reviews_url or "",
         "plex_base_url": settings.plex_base_url or DEFAULT_URLS["plex_base_url"],
         "plex_token": settings.plex_token or "",
@@ -179,6 +194,8 @@ def _to_public_settings_values() -> dict[str, str]:
         "drunkenslug_api_key": settings.drunkenslug_api_key or "",
         "usenet_base_url": settings.usenet_base_url or DEFAULT_URLS["usenet_base_url"],
         "usenet_api_key": settings.usenet_api_key or "",
+        "ollama_base_url": settings.ollama_base_url or DEFAULT_URLS["ollama_base_url"],
+        "ollama_model": settings.ollama_model or DEFAULT_URLS["ollama_model"],
     }
 
 
@@ -229,8 +246,14 @@ def _build_runtime() -> tuple[MemoryStore, SwarmOrchestrator]:
     )
 
     agents = [
-        OscarAgent(dataset_path=project_root / "data/oscars_best_picture.json"),
-        CriterionAgent(dataset_path=project_root / "data/criterion_collection.json"),
+        OscarAgent(
+            dataset_path=project_root / "data/oscars_best_picture.json",
+            memory_store=memory_store,
+        ),
+        CriterionAgent(
+            dataset_path=project_root / "data/criterion_collection.json",
+            memory_store=memory_store,
+        ),
         UpcomingAgent(
             tmdb_api_key=settings.tmdb_api_key,
             timeout_seconds=settings.source_timeout_seconds,
@@ -254,11 +277,6 @@ def _build_runtime() -> tuple[MemoryStore, SwarmOrchestrator]:
         PlexAgent(
             base_url=settings.plex_base_url,
             token=settings.plex_token,
-            timeout_seconds=settings.source_timeout_seconds,
-        ),
-        RadarrAgent(
-            base_url=settings.radarr_base_url,
-            api_key=settings.radarr_api_key,
             timeout_seconds=settings.source_timeout_seconds,
         ),
         UsenetAgent(
@@ -297,8 +315,14 @@ app = FastAPI(title=settings.app_title)
 templates = Jinja2Templates(directory=str(base_dir / "templates"))
 app.mount("/static", StaticFiles(directory=str(base_dir / "static")), name="static")
 
+# Include auth router
+app.include_router(auth_router)
+
 runtime_lock = asyncio.Lock()
 memory_store, swarm = _build_runtime()
+
+# Initialize auth module with memory store
+set_memory_store(memory_store)
 
 
 async def _reload_runtime() -> None:
@@ -307,10 +331,26 @@ async def _reload_runtime() -> None:
         memory_store, swarm = _build_runtime()
 
 
+async def _ollama_is_connected(base_url: str, model: str) -> bool:
+    try:
+        client = OllamaClient(
+            base_url=base_url,
+            model=model,
+            timeout_seconds=2.0,
+        )
+        health = await client.health_check()
+        return bool(health.get("ok"))
+    except Exception:
+        return False
+
+
 async def _integration_status() -> dict[str, bool]:
-    nzbgeek_configured = bool(settings.nzbgeek_rss_url) and (
-        ("{API_KEY}" not in (settings.nzbgeek_rss_url or "") and "${API_KEY}" not in (settings.nzbgeek_rss_url or ""))
-        or bool(settings.nzbgeek_api_key)
+    _rss = settings.nzbgeek_rss_url or ""
+    _has_placeholder = "{API_KEY}" in _rss or "${API_KEY}" in _rss
+    nzbgeek_configured = bool(_rss) and (not _has_placeholder or bool(settings.nzbgeek_api_key))
+    ollama_connected = await _ollama_is_connected(
+        settings.ollama_base_url,
+        settings.ollama_model,
     )
     return {
         "tmdb": bool(settings.tmdb_api_key),
@@ -322,6 +362,7 @@ async def _integration_status() -> dict[str, bool]:
         "nzbgeek": nzbgeek_configured,
         "drunkenslug": bool(settings.drunkenslug_api_key),
         "usenet": bool(settings.usenet_api_key or settings.nzbgeek_api_key or settings.drunkenslug_api_key),
+        "ollama": ollama_connected,
     }
 
 
@@ -683,10 +724,9 @@ async def _crawl_usenet_releases(limit: int, query: str | None = None) -> dict:
         )
         indexer_counts[indexer] = indexer_counts.get(indexer, 0) + 1
 
-    if settings.nzbgeek_rss_url and (
-        ("{API_KEY}" not in settings.nzbgeek_rss_url and "${API_KEY}" not in settings.nzbgeek_rss_url)
-        or settings.nzbgeek_api_key
-    ):
+    _rss_url = settings.nzbgeek_rss_url or ""
+    _rss_has_placeholder = "{API_KEY}" in _rss_url or "${API_KEY}" in _rss_url
+    if _rss_url and (not _rss_has_placeholder or settings.nzbgeek_api_key):
         try:
             rows = await UsenetClient(
                 base_url="https://api.nzbgeek.info",
@@ -825,7 +865,8 @@ async def usenet_page(request: Request) -> HTMLResponse:
 @app.get("/api/recommendations", response_model=RecommendationResponse)
 async def get_recommendations(
     user_id: str = Query(default="default"),
-    count: int = Query(default=12, ge=1, le=100),
+    count: int = Query(default=200, ge=1, le=1000),
+    sort: str | None = Query(default=None),
     sources: str | None = Query(default=None),
     release_from: str | None = Query(default=None),
     release_to: str | None = Query(default=None),
@@ -840,12 +881,378 @@ async def get_recommendations(
     return await swarm.recommend_filtered(
         user_id=user_id,
         count=count,
+        sort_mode=sort,
         required_sources=required_sources,
         release_date_from=release_date_from,
         release_date_to=release_date_to,
         year_from=year_from,
         year_to=year_to,
     )
+
+
+@app.get("/api/moods")
+async def get_moods() -> dict:
+    """Get all available mood categories."""
+    return {"ok": True, "moods": get_all_moods()}
+
+
+@app.get("/api/moods/infer/{user_id}")
+async def infer_moods_for_user(user_id: str) -> dict:
+    """Infer mood preferences based on user's feedback history.
+
+    Analyzes the user's liked movies to suggest matching moods.
+    """
+    try:
+        # Get user's feedback history
+        feedback_history = await memory.recent_feedback(user_id, limit=50)
+
+        # Convert to format expected by infer_user_moods
+        feedback_records = [
+            {
+                "liked": fb.get("liked", False),
+                "genres": fb.get("genres", []),
+                "title": fb.get("title", ""),
+                "year": fb.get("year"),
+            }
+            for fb in feedback_history
+        ]
+
+        # Infer moods
+        suggested_moods = infer_user_moods(feedback_records)
+
+        return {
+            "ok": True,
+            "user_id": user_id,
+            "suggested_moods": suggested_moods,
+            "feedback_count": len(feedback_records),
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": str(exc),
+            "suggested_moods": [],
+        }
+
+
+@app.get("/api/movies/year/{year}")
+async def get_movies_by_year(
+    year: int,
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=50, ge=1, le=200),
+) -> dict:
+    """Get ALL movies from TMDB for a specific year."""
+    if year < 1888 or year > 2030:
+        return {"ok": False, "error": "Invalid year", "movies": [], "total": 0}
+
+    # Fetch all movies for year (paginated at TMDB level)
+    all_movies = await swarm.fetch_movies_for_year(year, max_pages=10)
+
+    # Apply local pagination
+    start_idx = (page - 1) * per_page
+    end_idx = start_idx + per_page
+    page_movies = all_movies[start_idx:end_idx]
+
+    return {
+        "ok": True,
+        "year": year,
+        "page": page,
+        "per_page": per_page,
+        "total": len(all_movies),
+        "movies": [
+            {
+                "movie_id": m.movie_id,
+                "title": m.title,
+                "year": m.year,
+                "poster_url": m.poster_url,
+                "overview": m.overview,
+                "release_date": m.release_date,
+                "source_tags": m.source_tags,
+                "rottentomatoes_score": m.rottentomatoes_score,
+            }
+            for m in page_movies
+        ],
+    }
+
+
+@app.get("/api/recommendations/mood/{mood_name}")
+async def get_mood_recommendations(
+    mood_name: str,
+    user_id: str = Query(default="default"),
+    count: int = Query(default=24, ge=1, le=200),
+    year_from: int | None = Query(default=None),
+    year_to: int | None = Query(default=None),
+) -> dict:
+    """Get movie recommendations filtered by mood using LLM."""
+    mood = get_mood(mood_name)
+    if not mood:
+        return {"ok": False, "error": f"Unknown mood: {mood_name}", "recommendations": []}
+
+    # Get base recommendations
+    response = await swarm.recommend_filtered(
+        user_id=user_id,
+        count=min(count * 4, 400),
+        sort_mode=None,
+        required_sources=None,
+        release_date_from=None,
+        release_date_to=None,
+        year_from=year_from,
+        year_to=year_to,
+    )
+
+    # Build movie list for LLM analysis
+    movie_list = []
+    for idx, rec in enumerate(response.recommendations[:100]):  # Limit to 100 for LLM
+        movie = rec.movie
+        movie_list.append({
+            "idx": idx,
+            "title": movie.title,
+            "year": movie.year,
+            "genres": movie.genres,
+            "overview": (movie.overview or "")[:200],
+            "rec": rec,
+        })
+
+    # Use LLM to pick movies matching the mood
+    selected_indices = await _llm_filter_by_mood(mood, movie_list, count)
+
+    # Build response from selected movies
+    transformed_recommendations: list[dict] = []
+    for idx in selected_indices:
+        if idx < len(movie_list):
+            rec = movie_list[idx]["rec"]
+            transformed_recommendations.append({
+                "movie": rec.movie.model_dump(),
+                "score": float(rec.score),
+                "mood_score": 80.0,  # LLM selected = good match
+                "reasons": [reason.model_dump() for reason in rec.reasons],
+            })
+
+    # If LLM didn't return enough, fall back to strict genre-based filtering
+    if len(transformed_recommendations) < count:
+        # Use same strict genre requirements as pre-filter
+        mood_genre_rules = {
+            "funny": {"Comedy"},
+            "cozy": {"Comedy", "Drama", "Family", "Romance", "Animation"},
+            "romantic": {"Romance"},
+            "thrilling": {"Thriller", "Action", "Horror", "Mystery", "Crime"},
+            "dark": {"Crime", "Thriller", "Mystery", "Horror"},
+            "feel-good": {"Comedy", "Family", "Animation", "Romance"},
+            "mind-bending": {"Sci-Fi", "Mystery", "Thriller"},
+            "adventurous": {"Adventure", "Action", "Fantasy"},
+            "inspiring": {"Drama", "Documentary", "History"},
+        }
+        required_genres = mood_genre_rules.get(mood_name, set())
+        existing_titles = {r["movie"].get("title") for r in transformed_recommendations}
+
+        for rec in response.recommendations:
+            if len(transformed_recommendations) >= count:
+                break
+            movie = rec.movie
+            if movie.title in existing_titles:
+                continue
+            movie_genres = set(movie.genres or [])
+            # Must have at least one required genre
+            if required_genres and not (movie_genres & required_genres):
+                continue
+            existing_titles.add(movie.title)
+            transformed_recommendations.append({
+                "movie": movie.model_dump(),
+                "score": float(rec.score),
+                "mood_score": 60.0,  # Fallback = lower confidence
+                "reasons": [reason.model_dump() for reason in rec.reasons],
+            })
+
+    return {
+        "ok": True,
+        "mood": {
+            "name": mood.name,
+            "display_name": mood.display_name,
+            "emoji": mood.emoji,
+            "description": mood.description,
+        },
+        "recommendations": transformed_recommendations[:count],
+        "total": len(transformed_recommendations),
+    }
+
+
+def _prefilter_by_mood_genres(movie_list: list[dict], mood_name: str) -> list[dict]:
+    """Pre-filter movies by genre to help LLM make better selections."""
+    # Define which genres are REQUIRED/PREFERRED/AVOIDED for each mood
+    # require: at least one of these genres must be present
+    # prefer: extra weight for these genres
+    # avoid: exclude movies with these genres
+    mood_genre_rules = {
+        "cozy": {
+            "require": {"Comedy", "Drama", "Family", "Romance", "Animation", "Music"},
+            "prefer": {"Comedy", "Family", "Romance", "Animation"},
+            "avoid": {"Horror", "Thriller", "War", "Crime", "Action"},
+        },
+        "funny": {
+            "require": {"Comedy"},  # MUST have Comedy
+            "prefer": {"Comedy"},
+            "avoid": {"Horror", "Thriller", "War", "Crime", "Drama"},
+        },
+        "thrilling": {
+            "require": {"Thriller", "Action", "Horror", "Mystery", "Crime"},
+            "prefer": {"Thriller", "Action", "Horror"},
+            "avoid": {"Comedy", "Family", "Animation", "Romance", "Music"},
+        },
+        "romantic": {
+            "require": {"Romance"},
+            "prefer": {"Romance", "Drama"},
+            "avoid": {"Horror", "Action", "War", "Crime", "Thriller"},
+        },
+        "dark": {
+            "require": {"Crime", "Thriller", "Mystery", "Drama", "Horror"},
+            "prefer": {"Crime", "Thriller", "Horror"},
+            "avoid": {"Comedy", "Family", "Animation", "Music"},
+        },
+        "feel-good": {
+            "require": {"Comedy", "Family", "Animation", "Music", "Romance"},
+            "prefer": {"Comedy", "Family", "Animation"},
+            "avoid": {"Horror", "Thriller", "War", "Crime"},
+        },
+        "mind-bending": {
+            "require": {"Sci-Fi", "Mystery", "Thriller"},
+            "prefer": {"Sci-Fi", "Mystery"},
+            "avoid": {"Comedy", "Family", "Animation", "Romance"},
+        },
+        "nostalgic": {
+            "require": set(),  # No genre requirement
+            "prefer": set(),
+            "avoid": set(),
+        },
+        "adventurous": {
+            "require": {"Adventure", "Action", "Fantasy", "Sci-Fi"},
+            "prefer": {"Adventure", "Fantasy"},
+            "avoid": {"Documentary"},
+        },
+        "inspiring": {
+            "require": {"Drama", "Documentary", "History"},
+            "prefer": {"Drama", "History"},
+            "avoid": {"Horror", "Crime"},
+        },
+    }
+
+    rules = mood_genre_rules.get(mood_name, {"require": set(), "prefer": set(), "avoid": set()})
+    require_genres = rules.get("require", set())
+    prefer_genres = rules.get("prefer", set())
+    avoid_genres = rules.get("avoid", set())
+
+    # STRICT filtering: only include movies that match required genres
+    filtered = []
+    for m in movie_list:
+        genres = set(m.get("genres", []))
+        if not genres:
+            continue  # Skip movies without genre info
+        # MUST have at least one required genre
+        if require_genres and not (genres & require_genres):
+            continue
+        # MUST NOT have avoided genres (strict for moods like "funny")
+        if avoid_genres and (genres & avoid_genres):
+            continue
+        filtered.append(m)
+
+    # Only relax if we have almost nothing
+    if len(filtered) < 5:
+        # Relax: allow avoided genres but still require preferred genres
+        filtered = []
+        for m in movie_list:
+            genres = set(m.get("genres", []))
+            if not genres:
+                continue
+            if require_genres and not (genres & require_genres):
+                continue
+            filtered.append(m)
+
+    # Sort by preference score (more preferred genres = higher score)
+    def score_movie(m):
+        genres = set(m.get("genres", []))
+        return len(genres & prefer_genres) * 2 - len(genres & avoid_genres)
+
+    filtered.sort(key=score_movie, reverse=True)
+    return filtered
+
+
+async def _llm_filter_by_mood(mood, movie_list: list[dict], count: int) -> list[int]:
+    """Use LLM to select movies that match the mood."""
+    if not settings.ollama_base_url or not movie_list:
+        return []
+
+    # Pre-filter by genre to give LLM better candidates
+    prefiltered = _prefilter_by_mood_genres(movie_list, mood.name)
+
+    # Build a detailed movie list with overviews for better context
+    movies_text_parts = []
+    idx_map = {}  # Map prompt indices to original indices
+    for prompt_idx, m in enumerate(prefiltered[:50]):  # Limit for prompt size
+        genres = ', '.join(m['genres'][:3]) if m['genres'] else 'Unknown'
+        overview = m['overview'][:120] + '...' if len(m['overview']) > 120 else m['overview']
+        movies_text_parts.append(
+            f"{prompt_idx}. {m['title']} ({m['year'] or '?'}) [{genres}] - {overview or 'No description'}"
+        )
+        idx_map[prompt_idx] = m['idx']
+    movies_text = "\n".join(movies_text_parts)
+
+    # Define what each mood means for better filtering
+    mood_hints = {
+        "cozy": "Select ONLY feel-good, heartwarming movies. Comedy, family, romance films. NO thrillers, horror, crime, or tense films.",
+        "funny": "Select ONLY pure comedies. Movies that are genuinely funny and make people laugh. NO dramas, thrillers, or horror.",
+        "thrilling": "Select suspenseful, tense films. Action, horror, mystery, crime thrillers.",
+        "romantic": "Select love stories and romantic films. Romance, romantic comedies, relationship dramas.",
+        "dark": "Select dark, intense films. Crime, noir, psychological thrillers, gritty dramas.",
+        "feel-good": "Select uplifting, happy movies. Inspiring stories with positive endings. NO sad or dark films.",
+        "mind-bending": "Select complex, twist-filled films. Sci-fi puzzles, psychological mysteries.",
+        "nostalgic": "Select beloved classics and older films with retro charm.",
+        "adventurous": "Select epic journeys and adventures. Fantasy, exploration, action adventures.",
+        "inspiring": "Select triumph stories about overcoming odds. Biographical successes, sports victories.",
+    }
+    hint = mood_hints.get(mood.name, "")
+
+    prompt = f"""Select {count} movies that perfectly match "{mood.display_name}" mood.
+
+{hint}
+
+Movie list:
+{movies_text}
+
+Reply with ONLY the numbers of your selections, separated by commas.
+Example: 0, 3, 7, 12
+
+Selected movies:"""
+
+    try:
+        # Use larger model if available
+        model = "llama3.1:8b" if "llama3.1:8b" in settings.ollama_model or settings.ollama_model == "llama3.2:1b" else settings.ollama_model
+        client = OllamaClient(
+            base_url=settings.ollama_base_url,
+            model=model,
+            timeout_seconds=45.0,
+        )
+        response = await client.generate(
+            prompt=prompt,
+            system="You are a movie expert. Output only comma-separated numbers. No explanations.",
+        )
+
+        # Parse the response to extract indices
+        indices = []
+        # Clean response - extract just numbers
+        clean_response = ''.join(c if c.isdigit() or c in ', \n' else ' ' for c in response)
+        for part in clean_response.replace("\n", ",").split(","):
+            part = part.strip()
+            if part.isdigit():
+                prompt_idx = int(part)
+                # Map prompt index back to original index
+                if prompt_idx in idx_map:
+                    original_idx = idx_map[prompt_idx]
+                    if original_idx not in indices:
+                        indices.append(original_idx)
+                        if len(indices) >= count:
+                            break
+        return indices
+    except Exception as exc:
+        logger.warning(f"LLM mood filter failed: {exc}")
+        return []
 
 
 @app.get("/api/release-calendar")
@@ -950,7 +1357,7 @@ async def search_movies(q: str = Query(..., min_length=1)) -> dict:
 @app.get("/api/radarr-monitored")
 async def get_radarr_monitored() -> dict:
     if not settings.radarr_api_key:
-        return {"configured": False, "ok": False, "movies": [], "message": "Radarr not configured"}
+        return {"configured": False, "ok": False, "movies": [], "message": "Download service not configured"}
 
     try:
         movies = await RadarrClient(
@@ -1005,7 +1412,7 @@ async def get_download_health() -> dict:
         return {
             "configured": False,
             "ok": False,
-            "message": "Radarr API key not configured",
+            "message": "Download service API key not configured",
             "queue_count": 0,
             "active_count": 0,
             "download_rate_human": None,
@@ -1038,7 +1445,7 @@ async def get_download_history(limit: int = Query(default=40, ge=1, le=200)) -> 
         return {
             "configured": False,
             "ok": False,
-            "message": "Radarr API key not configured",
+            "message": "Download service API key not configured",
             "items": [],
         }
 
@@ -1068,7 +1475,7 @@ async def clear_download_history(payload: DownloadHistoryClearRequest) -> dict:
     if not settings.radarr_api_key:
         return {
             "status": "error",
-            "message": "Radarr API key not configured",
+            "message": "Download service API key not configured",
             "auto_download": payload.auto_download,
             "auto_delete": payload.auto_delete,
             "grabbed_count": 0,
@@ -1136,7 +1543,7 @@ async def clear_download_history(payload: DownloadHistoryClearRequest) -> dict:
 @app.post("/api/download-cancel")
 async def cancel_download(payload: DownloadCancelRequest) -> dict:
     if not settings.radarr_api_key:
-        return {"ok": False, "message": "Radarr API key not configured"}
+        return {"ok": False, "message": "Download service API key not configured"}
 
     try:
         client = RadarrClient(
@@ -1157,7 +1564,7 @@ async def cancel_download(payload: DownloadCancelRequest) -> dict:
 @app.post("/api/download-cancel-all")
 async def cancel_all_downloads() -> dict:
     if not settings.radarr_api_key:
-        return {"ok": False, "cancelled": 0, "errors": [], "message": "Radarr API key not configured"}
+        return {"ok": False, "cancelled": 0, "errors": [], "message": "Download service API key not configured"}
 
     try:
         client = RadarrClient(
@@ -1217,7 +1624,7 @@ class DownloadMovieRequest(BaseModel):
 @app.post("/api/monitor")
 async def monitor_movie(payload: DownloadMovieRequest) -> dict:
     if not settings.radarr_api_key:
-        return {"ok": False, "status": "skipped", "message": "Radarr not configured"}
+        return {"ok": False, "status": "skipped", "message": "Download service not configured"}
     try:
         result = await RadarrClient(
             base_url=settings.radarr_base_url,
@@ -1232,7 +1639,7 @@ async def monitor_movie(payload: DownloadMovieRequest) -> dict:
 @app.post("/api/download")
 async def download_movie(payload: DownloadMovieRequest) -> dict:
     if not settings.radarr_api_key:
-        return {"ok": False, "status": "skipped", "message": "Radarr not configured"}
+        return {"ok": False, "status": "skipped", "message": "Download service not configured"}
 
     try:
         result = await RadarrClient(
@@ -1356,9 +1763,185 @@ async def plex_library(
     return {"ok": True, "total": len(movies), "movies": movies[:limit]}
 
 
+class AIChatRequest(BaseModel):
+    message: str
+    context: str | None = None
+
+
+class AIChatResponse(BaseModel):
+    response: str
+    sources_queried: list[str] = Field(default_factory=list)
+
+
+async def _query_usenet_sources(query: str) -> dict[str, list[dict]]:
+    results: dict[str, list[dict]] = {}
+
+    if settings.drunkenslug_api_key:
+        try:
+            client = UsenetClient(
+                base_url=settings.drunkenslug_base_url,
+                api_key=settings.drunkenslug_api_key,
+                timeout_seconds=settings.source_timeout_seconds,
+            )
+            rows = await client.movie_search(query=query)
+            results["drunkenslug"] = rows[:10]
+        except Exception:
+            results["drunkenslug"] = []
+
+    if settings.nzbgeek_api_key and settings.nzbgeek_rss_url:
+        try:
+            client = UsenetClient(
+                base_url="https://api.nzbgeek.info",
+                api_key=settings.nzbgeek_api_key,
+                timeout_seconds=settings.source_timeout_seconds,
+            )
+            rows = await client.movie_search(query=query)
+            results["nzbgeek"] = rows[:10]
+        except Exception:
+            results["nzbgeek"] = []
+
+    if settings.usenet_api_key:
+        try:
+            client = UsenetClient(
+                base_url=settings.usenet_base_url,
+                api_key=settings.usenet_api_key,
+                timeout_seconds=settings.source_timeout_seconds,
+            )
+            rows = await client.movie_search(query=query)
+            results["usenet"] = rows[:10]
+        except Exception:
+            results["usenet"] = []
+
+    return results
+
+
+def _format_usenet_results(results: dict[str, list[dict]]) -> str:
+    if not any(results.values()):
+        return "No results found from any usenet source."
+
+    parts = []
+    for source, rows in results.items():
+        if rows:
+            titles = [f"- {r.get('title', 'Unknown')} ({r.get('size', 'N/A')})" for r in rows[:5]]
+            parts.append(f"**{source.title()}** ({len(rows)} results):\n" + "\n".join(titles))
+        else:
+            parts.append(f"**{source.title()}**: No results")
+    return "\n\n".join(parts)
+
+
+@app.post("/api/ai/chat")
+async def ai_chat(payload: AIChatRequest) -> AIChatResponse:
+    if not settings.ollama_base_url:
+        return AIChatResponse(
+            response="Ollama is not configured. Please set up Ollama in Settings.",
+            sources_queried=[],
+        )
+
+    message = payload.message.strip()
+    sources_queried: list[str] = []
+
+    search_terms = None
+    search_keywords = ["search", "find", "look for", "looking for", "any", "have you got", "do you have", "what about"]
+    provider_keywords = ["drunkenslug", "nzbgeek", "usenet", "nzb", "indexer"]
+
+    message_lower = message.lower()
+    is_search_query = any(kw in message_lower for kw in search_keywords)
+    mentions_provider = any(kw in message_lower for kw in provider_keywords)
+
+    if is_search_query or mentions_provider:
+        words = message.split()
+        stop_words = {"hey", "hi", "hello", "drunkenslug", "nzbgeek", "usenet", "can", "you", "do", "have", "any", "search", "find", "for", "the", "a", "an", "is", "there", "what", "about", "got", "looking"}
+        search_terms = " ".join([w for w in words if w.lower().strip("?,!.") not in stop_words])
+
+    usenet_context = ""
+    if search_terms:
+        usenet_results = await _query_usenet_sources(search_terms)
+        sources_queried = [k for k, v in usenet_results.items() if v]
+        usenet_context = _format_usenet_results(usenet_results)
+
+    system_prompt = """You are a helpful movie assistant for the Majic Movie Selector app.
+You can help users find movies on usenet indexers like DrunkenSlug, NZBGeek, and other Newznab sources.
+When users ask about movie availability, you'll receive search results from the configured indexers.
+Be friendly and conversational. If you have search results, summarize them helpfully.
+If no results were found, suggest the user try different search terms or check their indexer configuration."""
+
+    user_prompt = message
+    if usenet_context:
+        user_prompt = f"""User question: {message}
+
+Here are the search results from the usenet indexers:
+
+{usenet_context}
+
+Please respond to the user's question based on these results."""
+
+    try:
+        client = OllamaClient(
+            base_url=settings.ollama_base_url,
+            model=settings.ollama_model,
+            timeout_seconds=30.0,
+        )
+        response = await client.generate(prompt=user_prompt, system=system_prompt)
+        return AIChatResponse(response=response, sources_queried=sources_queried)
+    except Exception as exc:
+        return AIChatResponse(
+            response=f"Sorry, I couldn't connect to Ollama: {exc}",
+            sources_queried=sources_queried,
+        )
+
+
 @app.get("/api/integrations")
 async def integration_status() -> dict:
     return await _integration_status()
+
+
+@app.get("/api/ollama/models")
+async def list_ollama_models() -> dict:
+    if not settings.ollama_base_url:
+        return {"ok": False, "models": [], "message": "Ollama not configured"}
+    try:
+        client = OllamaClient(
+            base_url=settings.ollama_base_url,
+            model=settings.ollama_model,
+            timeout_seconds=10.0,
+        )
+        models = await client.list_models()
+        return {
+            "ok": True,
+            "models": models,
+            "current_model": settings.ollama_model,
+        }
+    except Exception as exc:
+        return {"ok": False, "models": [], "message": str(exc)}
+
+
+class OllamaPullRequest(BaseModel):
+    model: str
+
+
+@app.post("/api/ollama/pull")
+async def pull_ollama_model(payload: OllamaPullRequest, user: AdminUser) -> dict:
+    if not settings.ollama_base_url:
+        return {"ok": False, "message": "Ollama not configured"}
+
+    import httpx
+
+    model_name = payload.model.strip()
+    if not model_name:
+        return {"ok": False, "message": "Model name required"}
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(300.0)) as client:
+            response = await client.post(
+                f"{settings.ollama_base_url}/api/pull",
+                json={"name": model_name, "stream": False},
+            )
+            if response.status_code == 200:
+                return {"ok": True, "message": f"Model '{model_name}' pulled successfully"}
+            else:
+                return {"ok": False, "message": f"Failed to pull: {response.text}"}
+    except Exception as exc:
+        return {"ok": False, "message": str(exc)}
 
 
 @app.get("/api/settings")
@@ -1474,7 +2057,7 @@ async def test_integration(payload: IntegrationTestRequest) -> dict:
             return {
                 "ok": True,
                 "integration": integration,
-                "message": f"Radarr reachable ({len(rows)} tracked movies)",
+                "message": f"Download service reachable ({len(rows)} tracked movies)",
             }
 
         if integration == "nzbgeek":
@@ -1506,7 +2089,7 @@ async def test_integration(payload: IntegrationTestRequest) -> dict:
                 base_url=values["drunkenslug_base_url"],
                 api_key=values["drunkenslug_api_key"],
                 timeout_seconds=settings.source_timeout_seconds,
-            ).movie_search(query="")
+            ).movie_search(query="test")
             return {
                 "ok": True,
                 "integration": integration,
@@ -1526,7 +2109,134 @@ async def test_integration(payload: IntegrationTestRequest) -> dict:
                 "integration": integration,
                 "message": f"Usenet indexer reachable ({len(rows)} rows)",
             }
+
+        if integration == "ollama":
+            if not values["ollama_base_url"]:
+                return {"ok": False, "integration": integration, "message": "OLLAMA_BASE_URL missing"}
+
+            client = OllamaClient(
+                base_url=values["ollama_base_url"],
+                model=values["ollama_model"],
+                timeout_seconds=settings.source_timeout_seconds,
+            )
+            health = await client.health_check()
+            if not health.get("ok"):
+                return {
+                    "ok": False,
+                    "integration": integration,
+                    "message": health.get("error", "Unable to connect to Ollama"),
+                }
+
+            model_status = "available" if health["model_available"] else "not found"
+            if not health["model_available"]:
+                return {
+                    "ok": False,
+                    "integration": integration,
+                    "message": (
+                        f"Ollama reachable ({health['models_count']} models) "
+                        f"but model '{values['ollama_model']}' was not found"
+                    ),
+                }
+            return {
+                "ok": True,
+                "integration": integration,
+                "message": f"Ollama reachable ({health['models_count']} models, {values['ollama_model']} {model_status})",
+            }
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "integration": integration, "message": str(exc)}
 
     return {"ok": False, "integration": integration, "message": "Unsupported integration"}
+
+
+# ===== Explanation Endpoint =====
+
+
+class ExplanationRequest(BaseModel):
+    title: str
+    year: int | None = None
+    score: float = 0.0
+    reasons: list[dict] = Field(default_factory=list)
+    genres: list[str] = Field(default_factory=list)
+    overview: str | None = None
+
+
+@app.post("/api/explain")
+async def explain_recommendation(payload: ExplanationRequest) -> dict:
+    """Generate a natural language explanation for a movie recommendation."""
+    try:
+        explainer = get_explainer()
+        explanation = await explainer.explain_recommendation(
+            movie_title=payload.title,
+            movie_year=payload.year,
+            score=payload.score,
+            reasons=payload.reasons,
+            genres=payload.genres,
+            overview=payload.overview,
+        )
+        return {"ok": True, "explanation": explanation}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "explanation": None, "error": str(exc)}
+
+
+# ===== Admin Endpoints =====
+
+
+@app.get("/api/admin/sync-jobs")
+async def list_sync_jobs(user: AdminUser, limit: int = Query(default=20, ge=1, le=100)) -> dict:
+    """List recent sync jobs (admin only)."""
+    jobs = memory_store.recent_sync_jobs(limit=limit)
+    return {"ok": True, "jobs": jobs}
+
+
+@app.post("/api/admin/sync/{job_type}")
+async def trigger_sync(user: AdminUser, job_type: str) -> dict:
+    """Trigger a manual catalog sync (admin only)."""
+    if job_type not in ("oscars", "criterion", "usenet_poll"):
+        return {"ok": False, "message": f"Unknown job type: {job_type}"}
+
+    try:
+        from app.jobs import enqueue_sync_job, is_redis_available
+
+        if is_redis_available():
+            job_id = enqueue_sync_job(job_type)
+            if job_id:
+                return {"ok": True, "message": f"Sync job queued: {job_id}", "job_id": job_id}
+
+        # Fallback: run synchronously
+        if job_type == "usenet_poll":
+            from app.jobs.tasks.usenet_poll import poll_usenet_releases
+
+            result = poll_usenet_releases()
+        else:
+            from app.jobs.tasks.catalog_sync import sync_catalog
+
+            result = sync_catalog(job_type)
+        return {"ok": True, "message": "Sync completed", "result": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "message": str(exc)}
+
+
+@app.get("/api/admin/users")
+async def list_users(user: AdminUser, limit: int = Query(default=100, ge=1, le=500)) -> dict:
+    """List all users (admin only)."""
+    users = memory_store.list_users(limit=limit)
+    return {"ok": True, "users": users}
+
+
+@app.get("/api/admin/catalog-status")
+async def get_catalog_status(user: AuthenticatedUser) -> dict:
+    """Get catalog sync status (last sync times)."""
+    oscars_job = memory_store.last_sync_job("oscars")
+    criterion_job = memory_store.last_sync_job("criterion")
+
+    return {
+        "ok": True,
+        "oscars": {
+            "last_sync": oscars_job["completed_at"] if oscars_job else None,
+            "items": oscars_job["items_processed"] if oscars_job else 0,
+        },
+        "criterion": {
+            "last_sync": criterion_job["completed_at"] if criterion_job else None,
+            "items": criterion_job["items_processed"] if criterion_job else 0,
+        },
+    }

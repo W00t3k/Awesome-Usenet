@@ -80,6 +80,57 @@ class MemoryStore:
                 ON seen_inventory(user_id, title_key)
                 """
             )
+            # Users table for authentication
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    email TEXT UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    is_active INTEGER DEFAULT 1,
+                    is_admin INTEGER DEFAULT 0,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_users_username
+                ON users(username)
+                """
+            )
+            # Sync jobs tracking
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS sync_jobs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_type TEXT NOT NULL,
+                    status TEXT DEFAULT 'pending',
+                    started_at TEXT,
+                    completed_at TEXT,
+                    items_processed INTEGER DEFAULT 0,
+                    error_message TEXT
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_sync_jobs_type_status
+                ON sync_jobs(job_type, status)
+                """
+            )
+            # Catalog cache (replaces static JSON)
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS catalog_cache (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    catalog_type TEXT UNIQUE NOT NULL,
+                    data_json TEXT NOT NULL,
+                    synced_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
 
     async def add_feedback(self, payload: FeedbackInput) -> None:
         text = self._compose_embedding_text(payload.title, payload.overview, payload.genres)
@@ -322,3 +373,210 @@ class MemoryStore:
     def _title_year_key(title: str, year: int | None) -> str:
         normalized = title.strip().lower()
         return f"{normalized}::{year if year is not None else 'na'}"
+
+    # ===== User methods =====
+    def create_user(
+        self,
+        username: str,
+        password_hash: str,
+        email: str | None = None,
+        is_admin: bool = False,
+    ) -> int | None:
+        try:
+            with self._connect() as conn:
+                cursor = conn.execute(
+                    """
+                    INSERT INTO users (username, email, password_hash, is_admin)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (username, email, password_hash, int(is_admin)),
+                )
+                return cursor.lastrowid
+        except Exception:
+            return None
+
+    def get_user_by_username(self, username: str) -> dict | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, username, email, password_hash, is_active, is_admin, created_at
+                FROM users WHERE username = ?
+                """,
+                (username,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "id": row["id"],
+            "username": row["username"],
+            "email": row["email"],
+            "password_hash": row["password_hash"],
+            "is_active": bool(row["is_active"]),
+            "is_admin": bool(row["is_admin"]),
+            "created_at": row["created_at"],
+        }
+
+    def get_user_by_id(self, user_id: int) -> dict | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, username, email, password_hash, is_active, is_admin, created_at
+                FROM users WHERE id = ?
+                """,
+                (user_id,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "id": row["id"],
+            "username": row["username"],
+            "email": row["email"],
+            "password_hash": row["password_hash"],
+            "is_active": bool(row["is_active"]),
+            "is_admin": bool(row["is_admin"]),
+            "created_at": row["created_at"],
+        }
+
+    def list_users(self, limit: int = 100) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, username, email, is_active, is_admin, created_at
+                FROM users ORDER BY created_at DESC LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [
+            {
+                "id": row["id"],
+                "username": row["username"],
+                "email": row["email"],
+                "is_active": bool(row["is_active"]),
+                "is_admin": bool(row["is_admin"]),
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ]
+
+    def migrate_anonymous_data(self, anonymous_user_id: str, new_user_id: int) -> dict:
+        """Migrate feedback and seen data from anonymous UUID to authenticated user."""
+        new_user_key = f"user:{new_user_id}"
+        with self._connect() as conn:
+            feedback_cursor = conn.execute(
+                "UPDATE feedback SET user_id = ? WHERE user_id = ?",
+                (new_user_key, anonymous_user_id),
+            )
+            seen_cursor = conn.execute(
+                "UPDATE seen_inventory SET user_id = ? WHERE user_id = ?",
+                (new_user_key, anonymous_user_id),
+            )
+        return {
+            "feedback_migrated": feedback_cursor.rowcount,
+            "seen_migrated": seen_cursor.rowcount,
+        }
+
+    # ===== Sync job methods =====
+    def create_sync_job(self, job_type: str) -> int:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO sync_jobs (job_type, status, started_at)
+                VALUES (?, 'running', CURRENT_TIMESTAMP)
+                """,
+                (job_type,),
+            )
+            return cursor.lastrowid or 0
+
+    def complete_sync_job(
+        self,
+        job_id: int,
+        items_processed: int,
+        error_message: str | None = None,
+    ) -> None:
+        status = "failed" if error_message else "completed"
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE sync_jobs
+                SET status = ?, completed_at = CURRENT_TIMESTAMP,
+                    items_processed = ?, error_message = ?
+                WHERE id = ?
+                """,
+                (status, items_processed, error_message, job_id),
+            )
+
+    def recent_sync_jobs(self, limit: int = 20) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, job_type, status, started_at, completed_at,
+                       items_processed, error_message
+                FROM sync_jobs
+                ORDER BY id DESC LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [
+            {
+                "id": row["id"],
+                "job_type": row["job_type"],
+                "status": row["status"],
+                "started_at": row["started_at"],
+                "completed_at": row["completed_at"],
+                "items_processed": row["items_processed"],
+                "error_message": row["error_message"],
+            }
+            for row in rows
+        ]
+
+    def last_sync_job(self, job_type: str) -> dict | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, job_type, status, started_at, completed_at,
+                       items_processed, error_message
+                FROM sync_jobs
+                WHERE job_type = ? AND status = 'completed'
+                ORDER BY id DESC LIMIT 1
+                """,
+                (job_type,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "id": row["id"],
+            "job_type": row["job_type"],
+            "status": row["status"],
+            "started_at": row["started_at"],
+            "completed_at": row["completed_at"],
+            "items_processed": row["items_processed"],
+            "error_message": row["error_message"],
+        }
+
+    # ===== Catalog cache methods =====
+    def get_catalog_cache(self, catalog_type: str) -> tuple[list | None, str | None]:
+        """Returns (data, synced_at) or (None, None) if not cached."""
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT data_json, synced_at FROM catalog_cache
+                WHERE catalog_type = ?
+                """,
+                (catalog_type,),
+            ).fetchone()
+        if not row:
+            return None, None
+        return json.loads(row["data_json"]), row["synced_at"]
+
+    def set_catalog_cache(self, catalog_type: str, data: list) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO catalog_cache (catalog_type, data_json, synced_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(catalog_type) DO UPDATE SET
+                    data_json = excluded.data_json,
+                    synced_at = CURRENT_TIMESTAMP
+                """,
+                (catalog_type, json.dumps(data)),
+            )

@@ -115,7 +115,7 @@ Feedback body:
 ## 6. Tests
 
 ```bash
-pytest
+./scripts/test.sh
 ```
 
 ## 7. What to Productionize Next

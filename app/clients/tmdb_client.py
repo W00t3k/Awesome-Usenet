@@ -31,6 +31,70 @@ class TMDBClient:
         )
         return payload.get("results", [])
 
+    async def upcoming_movies_all(self, max_pages: int = 10) -> list[dict]:
+        """Fetch ALL upcoming movies across multiple pages."""
+        all_movies: list[dict] = []
+        page = 1
+        while page <= max_pages:
+            kwargs = self._request_kwargs({"page": page})
+            payload = await self._http.get_json(
+                f"{self.BASE_URL}/movie/upcoming", **kwargs,
+            )
+            results = payload.get("results", [])
+            if not results:
+                break
+            all_movies.extend(results)
+            total_pages = payload.get("total_pages", 1)
+            if page >= total_pages:
+                break
+            page += 1
+        return all_movies
+
+    async def now_playing_all(self, max_pages: int = 5) -> list[dict]:
+        """Fetch ALL now playing movies across multiple pages."""
+        all_movies: list[dict] = []
+        page = 1
+        while page <= max_pages:
+            kwargs = self._request_kwargs({"page": page})
+            payload = await self._http.get_json(
+                f"{self.BASE_URL}/movie/now_playing", **kwargs,
+            )
+            results = payload.get("results", [])
+            if not results:
+                break
+            all_movies.extend(results)
+            total_pages = payload.get("total_pages", 1)
+            if page >= total_pages:
+                break
+            page += 1
+        return all_movies
+
+    async def discover_movies_for_year(
+        self, year: int, max_pages: int = 10, sort_by: str = "popularity.desc"
+    ) -> list[dict]:
+        """Fetch ALL movies from TMDB for a specific year."""
+        all_movies: list[dict] = []
+        page = 1
+        while page <= max_pages:
+            extra: dict[str, Any] = {
+                "primary_release_year": year,
+                "sort_by": sort_by,
+                "page": page,
+            }
+            kwargs = self._request_kwargs(extra)
+            payload = await self._http.get_json(
+                f"{self.BASE_URL}/discover/movie", **kwargs,
+            )
+            results = payload.get("results", [])
+            if not results:
+                break
+            all_movies.extend(results)
+            total_pages = payload.get("total_pages", 1)
+            if page >= total_pages:
+                break
+            page += 1
+        return all_movies
+
     async def discover_movies(
         self,
         year_from: int | None = None,

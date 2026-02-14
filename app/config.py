@@ -15,7 +15,7 @@ class Settings(BaseSettings):
         alias="ROTTENTOMATOES_LIST_URL",
     )
     releases_url: str | None = Field(
-        default="https://www.releases.com/calendar/movies/upcoming",
+        default="https://www.releases.com/calendar/movie",
         alias="RELEASES_URL",
     )
     rogerebert_reviews_url: str | None = Field(
@@ -46,10 +46,24 @@ class Settings(BaseSettings):
     usenet_base_url: str = Field(default="http://localhost:5076", alias="USENET_BASE_URL")
     usenet_api_key: str | None = Field(default=None, alias="USENET_API_KEY")
 
+    ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
+    ollama_model: str = Field(default="llama3.2:1b", alias="OLLAMA_MODEL")
+
     source_timeout_seconds: float = 8.0
 
     data_dir: Path = Path("data")
     memory_db_path: Path = Path("data/memory.sqlite")
+
+    # Authentication
+    jwt_secret: str | None = Field(default=None, alias="JWT_SECRET")
+
+    # Background jobs (Redis/RQ)
+    redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
+
+    # Scheduled sync cron expressions
+    oscars_sync_cron: str = Field(default="0 3 * * 0", alias="OSCARS_SYNC_CRON")  # Weekly Sunday 3am
+    criterion_sync_cron: str = Field(default="0 4 1 * *", alias="CRITERION_SYNC_CRON")  # Monthly 1st 4am
+    usenet_poll_interval_minutes: int = Field(default=30, alias="USENET_POLL_INTERVAL_MINUTES")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", populate_by_name=True)
 

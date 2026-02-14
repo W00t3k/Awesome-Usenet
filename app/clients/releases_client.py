@@ -12,28 +12,66 @@ class ReleasesClient:
         self._http = HTTPClient(timeout_seconds)
 
     async def upcoming_movies(self, url: str) -> list[dict[str, Any]]:
-        html = await self._http.get_text(
-            url,
-            headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-                )
-            },
-        )
-        if self._looks_like_cloudflare_challenge(html):
-            raise RuntimeError("Releases.com blocked automated request (Cloudflare challenge)")
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+            )
+        }
+        errors: list[str] = []
+        for candidate in self._candidate_urls(url):
+            try:
+                html = await self._http.get_text(candidate, headers=headers)
+                if self._looks_like_cloudflare_challenge(html):
+                    errors.append(f"{candidate}: blocked by Cloudflare challenge")
+                    continue
 
-        payload = self._extract_jsonld_payload(html)
-        return self._extract_movies(payload)
+                payload = self._extract_jsonld_payload(html)
+                movies = self._extract_movies(payload)
+                if movies:
+                    return movies
+                errors.append(f"{candidate}: no movie rows found")
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{candidate}: {exc}")
+
+        detail = "; ".join(errors[:3]) if errors else "no candidates were attempted"
+        raise RuntimeError(f"Unable to parse Releases.com movie listings: {detail}")
+
+    @staticmethod
+    def _candidate_urls(url: str) -> list[str]:
+        normalized = str(url or "").strip().rstrip("/")
+        if not normalized:
+            return []
+
+        candidates: list[str] = [normalized]
+        if normalized.endswith("/calendar/movie"):
+            candidates.extend(
+                [
+                    normalized.replace("/calendar/movie", "/calendar/movies/upcoming"),
+                    normalized.replace("/calendar/movie", "/calendar/movies/new"),
+                ]
+            )
+        elif normalized.endswith("/calendar/movies"):
+            candidates.extend(
+                [
+                    f"{normalized}/upcoming",
+                    f"{normalized}/new",
+                ]
+            )
+
+        deduped: list[str] = []
+        for candidate in candidates:
+            if candidate not in deduped:
+                deduped.append(candidate)
+        return deduped
 
     @staticmethod
     def _looks_like_cloudflare_challenge(html: str) -> bool:
         lowered = html.lower()
         return (
-            "<title>just a moment..." in lowered
-            and "cf_chl_opt" in lowered
-            and "challenge-platform" in lowered
+            "just a moment" in lowered
+            and ("cf_chl_opt" in lowered or "_cf_chl_opt" in lowered)
+            and ("challenge-platform" in lowered or "cdn-cgi/challenge-platform" in lowered)
         )
 
     @staticmethod

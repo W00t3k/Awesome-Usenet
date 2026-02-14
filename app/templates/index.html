@@ -10,12 +10,23 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@400;600;700;800&family=Outfit:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260214h" />
   </head>
   <body>
     <div class="app">
       <header class="nav">
-        <div class="nav-brand">{{ app_title }}</div>
+        <a href="/" class="nav-brand">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img" focusable="false">
+              <rect x="3" y="5" width="18" height="14" rx="3"></rect>
+              <path d="M3 9h18"></path>
+              <path d="M7 5l3 4"></path>
+              <path d="M12 5l3 4"></path>
+              <path d="M17 5l3 4"></path>
+            </svg>
+          </span>
+          <span class="brand-text">Majic</span>
+        </a>
         <nav class="nav-links">
           <a class="nav-link active" href="/">Recommendations</a>
           <a class="nav-link" href="/usenet">Usenet Releases</a>
@@ -35,6 +46,38 @@
 
       <div class="layout">
         <aside class="sidebar">
+          <section class="card ai-chat-card" id="ai-chat-card">
+            <div class="card-header ai-chat-header" id="ai-chat-toggle">
+              <div class="ai-chat-title">
+                <span class="ai-chat-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" role="img" focusable="false">
+                    <path d="M12 2.8c1.8 1.7 2.4 3.6 2.5 5.1 1.5.1 3.4.7 5.1 2.5-1.7 1.8-3.6 2.4-5.1 2.5-.1 1.5-.7 3.4-2.5 5.1-1.8-1.7-2.4-3.6-2.5-5.1-1.5-.1-3.4-.7-5.1-2.5 1.7-1.8 3.6-2.4 5.1-2.5.1-1.5.7-3.4 2.5-5.1Z" />
+                  </svg>
+                </span>
+                <div class="ai-chat-heading">
+                  <h3>Pick A Movie</h3>
+                  <p>Fast shortlist</p>
+                </div>
+                <span id="ai-status" class="ai-status-badge"></span>
+              </div>
+              <button class="ai-chat-expand-btn" id="ai-expand-btn" type="button" title="Toggle chat">
+                <span class="expand-icon">▼</span>
+              </button>
+            </div>
+            <div class="ai-chat-body" id="ai-chat-body">
+              <div class="ai-chat-suggestions-wrap">
+                <p class="ai-suggestions-label">Quick Picks</p>
+                <div id="ai-suggestion-chips" class="ai-suggestion-chips"></div>
+              </div>
+              <div id="ai-featured-movie" class="ai-featured-movie" hidden></div>
+              <div id="ai-chat-messages" class="ai-chat-messages"></div>
+              <div class="ai-chat-input-wrapper">
+                <input type="text" id="ai-chat-input" class="ai-chat-input" placeholder="Pick me a movie for tonight..." />
+                <button id="ai-chat-send" class="btn btn-primary btn-sm" type="button">Send</button>
+              </div>
+            </div>
+          </section>
+
           <section class="card">
             <div class="card-header">
               <h3>2026 Calendar</h3>
@@ -43,53 +86,43 @@
             <div id="release-calendar" class="calendar"></div>
           </section>
 
-          <section class="card">
-            <div class="card-header">
-              <h3>Filters</h3>
-              <button id="clear-all-filters" class="btn btn-ghost btn-sm" type="button">Clear</button>
-            </div>
+          <section class="discover-panel">
+            <div id="mood-chips" class="mood-scroll"></div>
 
-            <div class="filter-section">
-              <div class="filter-row">
-                <div class="filter-field">
-                  <label for="count">Count</label>
-                  <input id="count" type="number" min="1" max="100" step="1" value="12" inputmode="numeric" />
-                </div>
-                <div class="filter-field">
-                  <label for="min-score">Min Score</label>
-                  <input id="min-score" type="number" min="0" max="100" step="1" placeholder="e.g. 50" inputmode="numeric" />
+            <!-- Year Picker -->
+            <div class="year-picker" id="year-picker">
+              <div class="year-picker-header">
+                <h4>Filter by Year</h4>
+                <button type="button" id="clear-year-btn" class="btn btn-ghost btn-sm">Clear</button>
+              </div>
+              <div class="year-display" id="year-display">Any Year</div>
+              <div class="year-slider-wrap">
+                <input type="range" id="year-slider" min="1900" max="2026" value="2026" step="1" />
+                <div class="year-slider-labels">
+                  <span>1900</span>
+                  <span>2026</span>
                 </div>
               </div>
-
-              <div class="filter-row">
-                <div class="filter-field">
-                  <label for="year-from">Year From</label>
-                  <input id="year-from" type="number" min="1888" max="2100" step="1" placeholder="Any" inputmode="numeric" />
-                </div>
-                <div class="filter-field">
-                  <label for="year-to">Year To</label>
-                  <input id="year-to" type="number" min="1888" max="2100" step="1" placeholder="Any" inputmode="numeric" />
-                </div>
-              </div>
-
-              <div class="filter-field" style="margin-bottom: 12px;">
-                <label for="genre-filter">Genre Contains</label>
-                <input id="genre-filter" type="text" placeholder="Action, Drama, Sci-Fi..." />
-              </div>
-
-              <div class="filter-field">
-                <label>Sources</label>
-                <div id="home-source-filters" class="source-filters"></div>
+              <div class="decade-chips">
+                <button type="button" class="decade-chip" data-decade="2020">2020s</button>
+                <button type="button" class="decade-chip" data-decade="2010">2010s</button>
+                <button type="button" class="decade-chip" data-decade="2000">2000s</button>
+                <button type="button" class="decade-chip" data-decade="1990">90s</button>
+                <button type="button" class="decade-chip" data-decade="1980">80s</button>
+                <button type="button" class="decade-chip" data-decade="1970">70s</button>
+                <button type="button" class="decade-chip" data-decade="classic">Classic</button>
               </div>
             </div>
-          </section>
 
-          <section class="card integrations-card">
-            <div class="card-header">
-              <h3>Integrations</h3>
-              <a class="btn btn-ghost btn-sm" href="/integrations">Manage</a>
-            </div>
-            <div id="integrations" class="badges"></div>
+            <!-- Hidden inputs for compatibility -->
+            <input id="year-from" type="hidden" />
+            <input id="year-to" type="hidden" />
+            <input id="min-score" type="hidden" value="0" />
+            <input id="count" type="hidden" value="200" />
+            <input id="genre-filter" type="hidden" />
+            <div id="home-source-filters" style="display:none;"></div>
+            <button id="clear-all-filters" type="button" style="display:none;"></button>
+            <span id="score-display" style="display:none;">Any</span>
           </section>
 
           <section class="card">
@@ -124,7 +157,7 @@
 
           <section class="card">
             <div class="card-header">
-              <h3>Radarr Monitored</h3>
+              <h3>Tracked Library</h3>
               <button id="refresh-monitored" class="btn-icon" type="button" title="Refresh">↻</button>
             </div>
             <p id="monitored-status" class="meta">Loading...</p>
@@ -160,10 +193,12 @@
               <div class="header-actions">
                 <span id="memory-count" class="meta"></span>
                 <select id="sort-select" class="theme-select" aria-label="Sort by">
+                  <option value="year-desc" selected>Newest First</option>
+                  <option value="year-asc">Oldest First</option>
+                  <option value="release-upcoming">Upcoming Soonest</option>
+                  <option value="release-current">Released Newest</option>
                   <option value="score-desc">Score ↓</option>
                   <option value="score-asc">Score ↑</option>
-                  <option value="year-desc">Newest First</option>
-                  <option value="year-asc">Oldest First</option>
                   <option value="title-asc">Title A–Z</option>
                   <option value="title-desc">Title Z–A</option>
                   <option value="rating-desc">Rating ↓</option>
@@ -175,6 +210,11 @@
             <div class="search-wrapper search-main">
               <input id="movie-search" type="search" class="search-input" placeholder="Search movies..." autocomplete="off" />
               <div id="search-results" class="search-dropdown"></div>
+            </div>
+
+            <div class="results-header" id="results-header">
+              <span class="results-count" id="results-count"></span>
+              <button type="button" class="load-all-btn" id="load-all-btn" style="display: none;">Load All</button>
             </div>
 
             <div id="recommendations" class="movie-grid"></div>
@@ -196,6 +236,7 @@
             <div class="flip-front-overlay">
               <div class="flip-front-title title"></div>
               <p class="flip-front-meta meta"></p>
+              <div class="source-origin front-source-origin"></div>
             </div>
           </div>
           <div class="flip-card-back">
@@ -204,6 +245,7 @@
               <div class="score-badge score back-score"></div>
             </div>
             <p class="meta back-meta"></p>
+            <div class="source-origin back-source-origin"></div>
             <ul class="source-links"></ul>
             <p class="overview"></p>
             <ul class="reasons"></ul>
@@ -237,6 +279,9 @@
             <h4>Links</h4>
             <div id="modal-source-links" class="link-buttons modal-source-buttons"></div>
 
+            <h4>Evidence</h4>
+            <ul id="modal-evidence" class="modal-evidence"></ul>
+
             <div class="modal-actions">
               <button id="modal-like" class="btn btn-success" type="button">❤ Like</button>
               <button id="modal-download" class="btn btn-ghost" type="button">▶ Download</button>
@@ -247,6 +292,6 @@
       </div>
     </div>
 
-    <script src="/static/app.js" defer></script>
+    <script src="/static/app.js?v=20260214n" defer></script>
   </body>
 </html>

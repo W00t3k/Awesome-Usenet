@@ -248,3 +248,36 @@ async def test_recommender_uses_rogerebert_when_rt_missing(tmp_path: Path) -> No
     ]
     assert critic_reasons
     assert "RogerEbert" in critic_reasons[0]
+
+
+@pytest.mark.asyncio
+async def test_recommender_filters_tv_episode_style_usenet_titles(tmp_path: Path) -> None:
+    emb = EmbeddingService()
+    store = MemoryStore(db_path=tmp_path / "memory.sqlite", embedding_service=emb)
+    rec = Recommender(memory_store=store)
+
+    results = await rec.rank(
+        user_id="u1",
+        source_movies={
+            "nzbgeek": [
+                MovieCandidate(
+                    movie_id="nzb:tv1",
+                    title="The One Show S2026E30",
+                    source_tags=["nzbgeek", "nzbgeek-rss"],
+                    available_on_usenet=True,
+                ),
+                MovieCandidate(
+                    movie_id="nzb:movie1",
+                    title="28 Years Later",
+                    year=2025,
+                    source_tags=["nzbgeek", "nzbgeek-rss"],
+                    available_on_usenet=True,
+                ),
+            ],
+        },
+        top_n=10,
+    )
+
+    titles = [row.movie.title for row in results]
+    assert "The One Show S2026E30" not in titles
+    assert "28 Years Later" in titles

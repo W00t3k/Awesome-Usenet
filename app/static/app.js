@@ -42,6 +42,7 @@ const modalMeta = document.getElementById("modal-meta");
 const modalScore = document.getElementById("modal-score");
 const modalOverview = document.getElementById("modal-overview");
 const modalSourceLinks = document.getElementById("modal-source-links");
+const modalEvidenceEl = document.getElementById("modal-evidence");
 const modalTrailerContainer = document.getElementById("modal-trailer-container");
 const modalDownloadBtn = document.getElementById("modal-download");
 const modalSkipBtn = document.getElementById("modal-skip");
@@ -51,16 +52,21 @@ const THEME_KEY = "majic_theme";
 let downloadHistoryClearedAt = localStorage.getItem(DOWNLOAD_HISTORY_CLEAR_KEY);
 let currentRecommendations = [];
 let currentModalMovie = null;
+const RECOMMENDATION_BATCH_SIZE = 8;
+const RECOMMENDATION_OBSERVER_ROOT_MARGIN = "500px 0px";
+let renderedRecommendationCount = 0;
+let recommendationObserver = null;
+let recommendationSentinel = null;
+let recommendationScrollActivated = false;
 
 const SOURCE_OPTIONS = [
   { key: "rt", label: "RT" },
   { key: "rogerebert", label: "Ebert" },
   { key: "nzbgeek", label: "NZBGeek" },
-  { key: "drunkenslug", label: "DSlug" },
+  { key: "drunkenslug", label: "Drunken Slug" },
   { key: "releases", label: "Releases" },
-  { key: "upcoming", label: "Upcoming" },
+  { key: "upcoming", label: "TMDB" },
   { key: "plex", label: "Plex" },
-  { key: "radarr", label: "Radarr" },
   { key: "oscars", label: "Oscars" },
   { key: "criterion", label: "Criterion" },
 ];
@@ -70,7 +76,7 @@ const homeSourceSelections = new Set(SOURCE_OPTIONS.map((opt) => opt.key));
 const calendarSourceSelections = new Set();
 let calendarItems = [];
 let filterDebounceTimer = null;
-const MAX_RECOMMENDATION_COUNT = 100;
+const MAX_RECOMMENDATION_COUNT = 200;
 
 // Theme handling
 function initTheme() {
@@ -94,16 +100,16 @@ async function updateStatusBanner() {
     const res = await fetch("/api/download-health");
     const data = await res.json();
     if (!data.configured) {
-      radarrStatusEl.innerHTML = '<span class="status-error">⚠ Radarr not configured</span> — Downloads disabled. <a href="/integrations" style="color: var(--primary);">Configure in Settings</a>';
+      radarrStatusEl.innerHTML = '<span class="status-error">⚠ Download service not configured</span> — Downloads disabled. <a href="/integrations" style="color: var(--primary);">Configure in Settings</a>';
     } else if (!data.ok) {
-      radarrStatusEl.innerHTML = `<span class="status-error">⚠ Radarr error</span> — ${data.message || "Connection failed"}`;
+      radarrStatusEl.innerHTML = `<span class="status-error">⚠ Download service error</span> — ${data.message || "Connection failed"}`;
     } else {
       const queueText = data.queue_count === 0 ? "No active downloads" : `${data.queue_count} in queue`;
       const rateText = data.download_rate_human ? ` • ${data.download_rate_human}` : "";
-      radarrStatusEl.innerHTML = `<span class="status-ok">✓ Radarr connected</span> — ${queueText}${rateText}`;
+      radarrStatusEl.innerHTML = `<span class="status-ok">✓ Download service connected</span> — ${queueText}${rateText}`;
     }
   } catch (err) {
-    radarrStatusEl.innerHTML = '<span class="status-error">⚠ Cannot check Radarr</span>';
+    radarrStatusEl.innerHTML = '<span class="status-error">⚠ Cannot check download service</span>';
   }
 }
 
@@ -146,13 +152,165 @@ function sourceKeysFromMovie(movie) {
   });
   if (movie.available_on_usenet) keys.add("usenet");
   if (movie.available_on_plex) keys.add("plex");
-  if (movie.available_on_radarr) keys.add("radarr");
   return keys;
 }
 
 function sourceLabel(key) {
+  const overrides = {
+    tmdb: "TMDB",
+    upcoming: "TMDB",
+    rogerebert: "Ebert",
+    releases: "Releases",
+    rt: "RT",
+    plex: "Plex",
+    nzbgeek: "NZBGeek",
+    drunkenslug: "Drunken Slug",
+  };
+  if (overrides[key]) return overrides[key];
   const option = SOURCE_OPTIONS.find((item) => item.key === key);
   return option ? option.label : key;
+}
+
+// Source tooltip labels for hover display
+const SOURCE_TOOLTIP_LABELS = {
+  oscars: "Academy Awards",
+  criterion: "Criterion Collection",
+  rottentomatoes: "Rotten Tomatoes",
+  rt: "Rotten Tomatoes",
+  rogerebert: "Roger Ebert",
+  nzbgeek: "NZBGeek",
+  drunkenslug: "DrunkenSlug",
+  usenet: "Usenet",
+  plex: "Plex Library",
+  radarr: "Radarr",
+  upcoming: "Coming Soon",
+  tmdb: "TMDB",
+  releases: "Releases.com",
+  "tmdb-discover": "TMDB",
+  "nzbgeek-rss": "NZBGeek",
+  "2160p": "4K UHD",
+  "1080p": "1080p HD",
+  hdr: "HDR",
+  "now-playing": "Now Playing",
+  unreleased: "Unreleased",
+};
+
+function renderSourceIndicatorsHtml(movie) {
+  const tags = movie.source_tags || [];
+  if (!tags.length) return "";
+
+  // Priority order for indicators
+  const priorityOrder = [
+    "oscars", "criterion", "rt", "rottentomatoes", "rogerebert",
+    "nzbgeek", "drunkenslug", "plex", "radarr", "upcoming", "tmdb",
+    "releases", "2160p", "1080p", "hdr"
+  ];
+
+  // Normalize and dedupe
+  const normalized = new Set();
+  const indicatorList = [];
+
+  for (const tag of tags) {
+    const key = canonicalSourceKey(tag) || tag.toLowerCase();
+    if (normalized.has(key)) continue;
+    // Skip generic tags
+    if (["usenet", "nzbgeek-rss", "tmdb-discover", "now-playing", "unreleased"].includes(key)) continue;
+    normalized.add(key);
+    const tooltip = SOURCE_TOOLTIP_LABELS[key];
+    if (tooltip) {
+      indicatorList.push({ key, tooltip, priority: priorityOrder.indexOf(key) });
+    }
+  }
+
+  // Sort by priority and limit to 5 dots
+  indicatorList.sort((a, b) => {
+    const pa = a.priority >= 0 ? a.priority : 999;
+    const pb = b.priority >= 0 ? b.priority : 999;
+    return pa - pb;
+  });
+
+  const dots = indicatorList.slice(0, 5).map(({ key, tooltip }) => {
+    const cssClass = key.replace(/[^a-z0-9]/gi, "-").toLowerCase();
+    return `<span class="source-dot ${cssClass}" data-tooltip="${tooltip}"></span>`;
+  });
+
+  return dots.length ? `<div class="source-indicators">${dots.join("")}</div>` : "";
+}
+
+function sourceOriginText(movie) {
+  if (!movie) return null;
+  const keys = sourceKeysFromMovie(movie);
+  const priority = [
+    "oscars",
+    "criterion",
+    "rt",
+    "rogerebert",
+    "drunkenslug",
+    "nzbgeek",
+    "releases",
+    "upcoming",
+    "plex",
+    "radarr",
+  ];
+  const labels = [];
+  priority.forEach((key) => {
+    if (!keys.has(key)) return;
+    const label = sourceLabel(key);
+    if (!labels.includes(label)) labels.push(label);
+  });
+  if (!labels.length) {
+    if (keys.has("usenet")) return "Usenet";
+    return null;
+  }
+  return labels.slice(0, 3).join(" · ");
+}
+
+function sourceAttributionText(movie) {
+  if (!movie) return null;
+  const keys = sourceKeysFromMovie(movie);
+  const primaryOrder = [
+    "drunkenslug",
+    "nzbgeek",
+    "releases",
+    "tmdb",
+    "upcoming",
+    "rt",
+    "rogerebert",
+    "oscars",
+    "criterion",
+  ];
+  const primaryLabels = [];
+  primaryOrder.forEach((key) => {
+    if (!keys.has(key)) return;
+    const label = sourceLabel(key);
+    if (!primaryLabels.includes(label)) primaryLabels.push(label);
+  });
+  if (primaryLabels.length) {
+    return primaryLabels.join(" / ");
+  }
+
+  if (keys.has("usenet")) return "Usenet";
+
+  const fallbackOrder = ["plex"];
+  const fallbackLabels = fallbackOrder.filter((key) => keys.has(key)).map((key) => sourceLabel(key));
+  return fallbackLabels.length ? fallbackLabels.join(" / ") : null;
+}
+
+function evidenceItems(movie) {
+  const raw = Array.isArray(movie?.evidence) ? movie.evidence : [];
+  const cleaned = raw
+    .map((row) => String(row || "").trim())
+    .filter(Boolean)
+    .map((row) => row.replace(/\s+/g, " "));
+  const unique = [...new Set(cleaned)];
+  if (unique.length) return unique;
+  const source = sourceAttributionText(movie);
+  return source ? [`Aggregated from ${source}`] : [];
+}
+
+function titleWithSource(movie) {
+  const baseTitle = String(movie?.title || "").trim();
+  return baseTitle || "";
 }
 
 function renderSourceFilters(container, options, selectedSet, onToggle) {
@@ -249,6 +407,44 @@ function criticLabel(movie) {
   return null;
 }
 
+function parseMovieReleaseDate(movie) {
+  const raw = String(movie?.release_date || "").trim();
+  if (!raw) return null;
+  const normalized = raw.slice(0, 10);
+  const dt = new Date(`${normalized}T00:00:00`);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+function movieReleaseSortValue(movie) {
+  const dt = parseMovieReleaseDate(movie);
+  if (dt) return dt.getTime();
+  const year = Number(movie?.year || 0);
+  if (Number.isFinite(year) && year > 0) return Date.UTC(year, 0, 1);
+  return Number.NEGATIVE_INFINITY;
+}
+
+function releaseDateChip(movie) {
+  const dt = parseMovieReleaseDate(movie);
+  if (!dt) return null;
+  return `Release ${dt.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+}
+
+function isUpcomingRelease(movie) {
+  const dt = parseMovieReleaseDate(movie);
+  if (!dt) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return dt.getTime() >= today.getTime();
+}
+
+function isCurrentRelease(movie) {
+  const dt = parseMovieReleaseDate(movie);
+  if (!dt) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return dt.getTime() < today.getTime();
+}
+
 async function fetchIntegrations() {
   if (!integrationsEl) return;
 
@@ -262,13 +458,14 @@ async function fetchIntegrations() {
       rogerebert: "Ebert",
       releases: "Releases",
       nzbgeek: "NZBGeek",
-      drunkenslug: "DSlug",
+      drunkenslug: "Drunken Slug",
       tmdb: "TMDB",
       plex: "Plex",
-      radarr: "Radarr",
+      radarr: "Downloads",
+      ollama: "AI",
     };
 
-    // Put radarr first since it's important for downloads
+    // Put downloader status first since it affects downloads
     const entries = Object.entries(data).filter(([name]) => name !== "usenet");
     const radarrEntry = entries.find(([name]) => name === "radarr");
     const otherEntries = entries.filter(([name]) => name !== "radarr");
@@ -280,9 +477,9 @@ async function fetchIntegrations() {
       const statusText = active ? "on" : "off";
       badge.textContent = `${labelMap[name] || name}: ${statusText}`;
 
-      // Add special styling for Radarr since it affects downloads
+      // Add special styling for download service since it affects downloads
       if (name === "radarr" && !active) {
-        badge.title = "Configure Radarr to enable movie downloads";
+        badge.title = "Configure download service to enable movie downloads";
       }
 
       integrationsEl.appendChild(badge);
@@ -541,8 +738,8 @@ async function loadDownloadActivity(silent = false) {
     renderNowDownloading(health);
 
     if (!health.configured) {
-      downloadHealthEl.textContent = health.message || "Radarr not configured.";
-      appendListItem(activeDownloadsEl, "Configure Radarr in Integrations.");
+      downloadHealthEl.textContent = health.message || "Download service not configured.";
+      appendListItem(activeDownloadsEl, "Configure download service in Integrations.");
     } else if (!health.ok) {
       downloadHealthEl.textContent = `Error: ${health.message || "unknown"}`;
     } else if (!health.queue_count) {
@@ -557,7 +754,7 @@ async function loadDownloadActivity(silent = false) {
     const historyItems = (history.items || []).filter((item) => !hasPassedClearCutoff(item.timestamp));
 
     if (!history.configured) {
-      appendListItem(downloadHistoryEl, "Radarr not configured.");
+      appendListItem(downloadHistoryEl, "Download service not configured.");
     } else if (!history.ok) {
       appendListItem(downloadHistoryEl, `Error: ${history.message || "unknown"}`);
     } else if (!historyItems.length) {
@@ -587,7 +784,7 @@ async function loadRadarrMonitored() {
     monitoredListEl.innerHTML = "";
 
     if (!data.configured) {
-      monitoredStatusEl.textContent = "Radarr not configured.";
+      monitoredStatusEl.textContent = "Download service not configured.";
       return;
     }
     if (!data.ok) {
@@ -595,7 +792,7 @@ async function loadRadarrMonitored() {
       return;
     }
     if (!data.movies.length) {
-      monitoredStatusEl.textContent = "No movies tracked in Radarr.";
+      monitoredStatusEl.textContent = "No tracked movies.";
       return;
     }
 
@@ -768,7 +965,6 @@ function sourceIcons(movie) {
   }
   if (tags.has("rogerebert")) icons.push({ cls: "rogerebert", label: "RogerEbert", text: "RE" });
   if (movie.available_on_plex || tags.has("plex")) icons.push({ cls: "plex", label: "Plex", text: "P" });
-  if (movie.available_on_radarr || tags.has("radarr")) icons.push({ cls: "radarr", label: "Radarr", text: "R" });
   if (tags.has("nzbgeek") || tags.has("nzbgeek-rss")) icons.push({ cls: "nzb", label: "NZBGeek", text: "NZB" });
   if (tags.has("drunkenslug")) icons.push({ cls: "nzb", label: "DrunkenSlug", text: "DS" });
   if (tags.has("releases")) icons.push({ cls: "releases", label: "Releases", text: "REL" });
@@ -855,7 +1051,7 @@ function renderHeroMovie(rec) {
   info.className = "hero-info";
 
   const title = document.createElement("h3");
-  title.textContent = movie.title;
+  title.textContent = titleWithSource(movie);
   title.style.cursor = "pointer";
   title.addEventListener("click", () => openMovieModal(rec));
 
@@ -926,7 +1122,7 @@ function renderHeroMovie(rec) {
         dlBtn.textContent = "Already tracked";
       } else if (result?.status === "error") {
         dlBtn.textContent = "Error";
-        dlBtn.title = result.message || "Radarr error";
+        dlBtn.title = result.message || "Download service error";
       } else {
         dlBtn.textContent = "\u2713 Sent";
       }
@@ -951,8 +1147,30 @@ function renderHeroMovie(rec) {
     }
   });
 
+  const explainBtn = document.createElement("button");
+  explainBtn.className = "btn btn-ghost";
+  explainBtn.textContent = "Why this?";
+  explainBtn.title = "Get an AI explanation for this recommendation";
+  explainBtn.addEventListener("click", async () => {
+    if (explainBtn.disabled) return;
+    explainBtn.disabled = true;
+    explainBtn.textContent = "Thinking...";
+    try {
+      const explanation = await fetchExplanation(rec);
+      if (explanation) {
+        showExplanationTooltip(explainBtn, explanation);
+      }
+      explainBtn.textContent = "Why this?";
+      explainBtn.disabled = false;
+    } catch (err) {
+      explainBtn.textContent = "Why this?";
+      explainBtn.disabled = false;
+    }
+  });
+
   actions.appendChild(likeBtn);
   actions.appendChild(dlBtn);
+  actions.appendChild(explainBtn);
   actions.appendChild(skipBtn);
 
   info.appendChild(title);
@@ -966,6 +1184,49 @@ function renderHeroMovie(rec) {
   card.appendChild(posterDiv);
   card.appendChild(info);
   movieDayContentEl.appendChild(card);
+}
+
+async function fetchExplanation(rec) {
+  const movie = rec.movie;
+  try {
+    const response = await fetch("/api/explain", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: movie.title,
+        year: movie.year,
+        score: rec.score,
+        reasons: rec.reasons || [],
+        genres: movie.genres || [],
+        overview: movie.overview,
+      }),
+    });
+    const data = await response.json();
+    return data.ok ? data.explanation : null;
+  } catch (err) {
+    console.error("Explanation fetch failed:", err);
+    return null;
+  }
+}
+
+function showExplanationTooltip(anchor, text) {
+  // Remove existing tooltip
+  const existingTooltip = document.querySelector(".explanation-tooltip");
+  if (existingTooltip) existingTooltip.remove();
+
+  const tooltip = document.createElement("div");
+  tooltip.className = "explanation-tooltip";
+  tooltip.textContent = text;
+
+  // Position near the button
+  document.body.appendChild(tooltip);
+  const rect = anchor.getBoundingClientRect();
+  tooltip.style.top = `${rect.bottom + 10 + window.scrollY}px`;
+  tooltip.style.left = `${Math.max(10, rect.left - 100)}px`;
+
+  // Auto-remove after 8 seconds or on click
+  setTimeout(() => tooltip.remove(), 8000);
+  tooltip.addEventListener("click", () => tooltip.remove());
 }
 
 async function sendFeedback(movie, liked) {
@@ -1112,7 +1373,7 @@ function openMovieModal(rec) {
   }
 
   // Set title
-  if (modalTitle) modalTitle.textContent = movie.title;
+  if (modalTitle) modalTitle.textContent = titleWithSource(movie);
 
   // Set meta
   if (modalMeta) {
@@ -1149,6 +1410,16 @@ function openMovieModal(rec) {
     });
   }
 
+  if (modalEvidenceEl) {
+    modalEvidenceEl.innerHTML = "";
+    const evidence = evidenceItems(movie).slice(0, 6);
+    evidence.forEach((line) => {
+      const li = document.createElement("li");
+      li.textContent = line;
+      modalEvidenceEl.appendChild(li);
+    });
+  }
+
   // Setup action buttons
   const modalLikeBtn = document.getElementById("modal-like");
   if (modalLikeBtn) {
@@ -1181,7 +1452,7 @@ function openMovieModal(rec) {
           modalDownloadBtn.textContent = "Already tracked";
         } else if (result?.status === "error") {
           modalDownloadBtn.textContent = "Error";
-          modalDownloadBtn.title = result.message || "Radarr error";
+          modalDownloadBtn.title = result.message || "Download service error";
         } else {
           modalDownloadBtn.textContent = "\u2713 Sent";
         }
@@ -1238,177 +1509,336 @@ if (movieModal) {
   });
 }
 
+function disconnectRecommendationObserver() {
+  if (!recommendationObserver) return;
+  recommendationObserver.disconnect();
+  recommendationObserver = null;
+}
+
+function resetRecommendationRenderState() {
+  disconnectRecommendationObserver();
+  renderedRecommendationCount = 0;
+  recommendationScrollActivated = false;
+  if (recommendationSentinel) recommendationSentinel.remove();
+  recommendationSentinel = null;
+}
+
+function clearRecommendationsMessage(html) {
+  if (!recsEl) return;
+  resetRecommendationRenderState();
+  currentRecommendations = [];
+  renderAiSuggestions();
+  recsEl.innerHTML = html;
+}
+
+function ensureRecommendationSentinel() {
+  if (!recsEl) return null;
+  if (!recommendationSentinel) {
+    recommendationSentinel = document.createElement("div");
+    recommendationSentinel.className = "recommendation-sentinel";
+    recommendationSentinel.setAttribute("aria-hidden", "true");
+    recommendationSentinel.style.gridColumn = "1 / -1";
+    recommendationSentinel.style.height = "1px";
+    recommendationSentinel.style.width = "100%";
+  }
+  if (!recommendationSentinel.isConnected) recsEl.appendChild(recommendationSentinel);
+  return recommendationSentinel;
+}
+
+function buildRecommendationCardNode(rec, index) {
+  const node = template.content.cloneNode(true);
+  const card = node.querySelector(".flip-card");
+  if (!card) {
+    console.error("Could not find .flip-card in template");
+    return null;
+  }
+  card.dataset.movieIndex = String(index);
+
+  const movie = rec.movie;
+  const critic = criticLabel(movie);
+  const release = releaseDateChip(movie);
+  const genreText = (movie.genres || []).slice(0, 3).join(", ");
+  const frontMetaText = [movie.year || "Year unknown", release, genreText || null].filter(Boolean).join(" \u2022 ");
+  const backMetaText = [movie.year || "Year unknown", release, genreText || null, critic].filter(Boolean).join(" \u2022 ");
+  const scoreText = `${Math.round(rec.score)}`;
+
+  // --- Front ---
+  const frontTitle = node.querySelector(".flip-front-title");
+  if (frontTitle) frontTitle.textContent = titleWithSource(movie);
+
+  const frontMeta = node.querySelector(".flip-front-meta");
+  if (frontMeta) frontMeta.textContent = frontMetaText;
+  const originText = sourceOriginText(movie);
+
+  const frontOriginEl = node.querySelector(".front-source-origin");
+  if (frontOriginEl) {
+    if (originText) {
+      frontOriginEl.textContent = `From ${originText}`;
+      frontOriginEl.style.display = "inline-flex";
+    } else {
+      frontOriginEl.textContent = "";
+      frontOriginEl.style.display = "none";
+    }
+  }
+
+  const frontScore = node.querySelector(".flip-front-score");
+  if (frontScore) frontScore.textContent = scoreText;
+
+  // Poster image
+  const imageEl = node.querySelector(".cover-image");
+  const fallbackEl = node.querySelector(".cover-fallback");
+  const monogramEl = node.querySelector(".cover-monogram");
+  const yearEl = node.querySelector(".cover-year");
+
+  if (monogramEl) monogramEl.textContent = monogramFromTitle(movie.title || "Movie");
+  if (yearEl) yearEl.textContent = movie.year || "";
+
+  const posterUrl = (movie.poster_url || "").trim();
+  if (posterUrl && imageEl) {
+    imageEl.src = posterUrl;
+    imageEl.style.display = "block";
+    if (fallbackEl) fallbackEl.style.display = "none";
+    imageEl.onerror = () => {
+      imageEl.src = generatedPosterDataUrl(movie);
+    };
+  } else if (imageEl) {
+    imageEl.src = generatedPosterDataUrl(movie);
+    imageEl.style.display = "block";
+    if (fallbackEl) fallbackEl.style.display = "none";
+  }
+
+  // --- Source Indicators (dots with hover tooltips) ---
+  const frontEl = node.querySelector(".flip-card-front");
+  if (frontEl) {
+    const indicatorsHtml = renderSourceIndicatorsHtml(movie);
+    if (indicatorsHtml) {
+      const indicatorsContainer = document.createElement("div");
+      indicatorsContainer.innerHTML = indicatorsHtml;
+      const indicatorsEl = indicatorsContainer.firstElementChild;
+      if (indicatorsEl) {
+        frontEl.appendChild(indicatorsEl);
+      }
+    }
+  }
+
+  // --- Back ---
+  const backTitles = node.querySelectorAll(".flip-card-back .title");
+  backTitles.forEach((el) => {
+    el.textContent = titleWithSource(movie);
+    el.addEventListener("click", (e) => { e.stopPropagation(); openMovieModal(rec); });
+  });
+
+  const backScore = node.querySelector(".back-score");
+  if (backScore) backScore.textContent = scoreText;
+
+  const backMeta = node.querySelector(".back-meta");
+  if (backMeta) backMeta.textContent = backMetaText;
+  const backOriginEl = node.querySelector(".back-source-origin");
+  const backSourceText = sourceAttributionText(movie);
+  if (backOriginEl) {
+    if (backSourceText) {
+      backOriginEl.textContent = `From ${backSourceText}`;
+      backOriginEl.style.display = "inline-flex";
+    } else {
+      backOriginEl.textContent = "";
+      backOriginEl.style.display = "none";
+    }
+  }
+
+  const overviewEl = node.querySelector(".overview");
+  if (overviewEl) overviewEl.textContent = movie.overview || "No overview available.";
+
+  const sourceLinksEl = node.querySelector(".source-links");
+  if (sourceLinksEl) {
+    getSourceLinks(movie).slice(0, 4).forEach((link) => {
+      const li = document.createElement("li");
+      const a = document.createElement("a");
+      a.href = link.url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = link.label;
+      a.className = `source-link ${link.cls}`;
+      a.addEventListener("click", (e) => e.stopPropagation());
+      li.appendChild(a);
+      sourceLinksEl.appendChild(li);
+    });
+  }
+
+  const reasonsEl = node.querySelector(".reasons");
+  if (reasonsEl) {
+    reasonsEl.innerHTML = "";
+    const evidence = evidenceItems(movie).slice(0, 3);
+    evidence.forEach((line) => {
+      const li = document.createElement("li");
+      li.textContent = line;
+      reasonsEl.appendChild(li);
+    });
+    reasonsEl.style.display = evidence.length ? "grid" : "none";
+  }
+
+  // --- Trailer embed on back ---
+  const trailerEmbed = node.querySelector(".trailer-embed");
+  let trailerLoaded = false;
+
+  // --- Flip on click ---
+  card.addEventListener("click", () => {
+    card.classList.toggle("flipped");
+    if (card.classList.contains("flipped") && trailerEmbed && !trailerLoaded) {
+      trailerLoaded = true;
+      loadTrailerEmbed(trailerEmbed, movie);
+    }
+  });
+
+  // --- Buttons ---
+  const likeBtn = node.querySelector(".like");
+  const dlBtn = node.querySelector(".download");
+  const dislikeBtn = node.querySelector(".dislike");
+
+  likeBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (likeBtn.disabled) return;
+    likeBtn.disabled = true;
+    likeBtn.textContent = "...";
+    try {
+      await sendFeedback(movie, true);
+      const monRes = await fetch("/api/monitor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: movie.title, year: movie.year }),
+      });
+      const monData = await monRes.json();
+      if (monData.status === "monitored") {
+        likeBtn.textContent = "✓ Monitoring";
+      } else if (monData.status === "exists") {
+        likeBtn.textContent = "✓ Liked";
+      } else {
+        likeBtn.textContent = "✓ Liked";
+      }
+      loadRadarrMonitored();
+    } catch (err) {
+      likeBtn.textContent = "Error";
+    }
+  });
+
+  if (dlBtn) {
+    dlBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (dlBtn.disabled) return;
+      dlBtn.disabled = true;
+      dlBtn.textContent = "Sending...";
+      try {
+        const result = await sendDownload(movie);
+        if (result?.status === "queued") {
+          dlBtn.textContent = "\u2713 Queued!";
+        } else if (result?.status === "exists") {
+          dlBtn.textContent = "Already tracked";
+        } else if (result?.status === "error") {
+          dlBtn.textContent = "Error";
+          dlBtn.title = result.message || "Download service error";
+        } else {
+          dlBtn.textContent = "\u2713 Sent";
+        }
+        await loadDownloadActivity();
+      } catch (err) {
+        dlBtn.textContent = "Failed";
+        dlBtn.title = err.message || "Download failed";
+      }
+    });
+  }
+
+  dislikeBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (dislikeBtn.disabled) return;
+    dislikeBtn.disabled = true;
+    likeBtn.disabled = true;
+    try {
+      await sendFeedback(movie, false);
+      card.style.opacity = "0.5";
+      dislikeBtn.textContent = "Skipped";
+    } catch (err) {
+      dislikeBtn.textContent = "Error";
+    }
+  });
+
+  return node;
+}
+
+function appendRecommendationBatch() {
+  if (!recsEl || renderedRecommendationCount >= currentRecommendations.length) return 0;
+  const nextCount = Math.min(
+    renderedRecommendationCount + RECOMMENDATION_BATCH_SIZE,
+    currentRecommendations.length
+  );
+  const fragment = document.createDocumentFragment();
+  let appended = 0;
+  for (let i = renderedRecommendationCount; i < nextCount; i += 1) {
+    const built = buildRecommendationCardNode(currentRecommendations[i], i);
+    if (!built) continue;
+    fragment.appendChild(built);
+    appended += 1;
+  }
+  if (appended > 0) {
+    if (recommendationSentinel && recommendationSentinel.isConnected) {
+      recsEl.insertBefore(fragment, recommendationSentinel);
+    } else {
+      recsEl.appendChild(fragment);
+    }
+  }
+  renderedRecommendationCount = nextCount;
+  if (renderedRecommendationCount >= currentRecommendations.length) {
+    disconnectRecommendationObserver();
+    if (recommendationSentinel) recommendationSentinel.remove();
+    recommendationSentinel = null;
+  }
+  return appended;
+}
+
+function recommendationSentinelNearViewport(offsetPx = 240) {
+  if (!recommendationSentinel) return false;
+  const rect = recommendationSentinel.getBoundingClientRect();
+  return rect.top <= window.innerHeight + offsetPx;
+}
+
+function maybeAppendRecommendationBatch() {
+  if (!recommendationScrollActivated) return;
+  if (!recommendationSentinel || renderedRecommendationCount >= currentRecommendations.length) return;
+  if (!recommendationSentinelNearViewport()) return;
+  appendRecommendationBatch();
+}
+
+function setupRecommendationObserver() {
+  if (!recommendationSentinel || renderedRecommendationCount >= currentRecommendations.length) return;
+  if (typeof IntersectionObserver !== "function") {
+    while (renderedRecommendationCount < currentRecommendations.length) {
+      const appended = appendRecommendationBatch();
+      if (!appended) break;
+    }
+    return;
+  }
+
+  disconnectRecommendationObserver();
+  recommendationObserver = new IntersectionObserver((entries) => {
+    if (!entries.some((entry) => entry.isIntersecting)) return;
+    if (!recommendationScrollActivated) return;
+    appendRecommendationBatch();
+  }, {
+    root: null,
+    rootMargin: RECOMMENDATION_OBSERVER_ROOT_MARGIN,
+    threshold: 0.01,
+  });
+  recommendationObserver.observe(recommendationSentinel);
+}
+
 function renderRecommendations(recommendations) {
   if (!recsEl || !template) return;
+  resetRecommendationRenderState();
   recsEl.innerHTML = "";
-  currentRecommendations = recommendations;
-
-  recommendations.forEach((rec, index) => {
-    const node = template.content.cloneNode(true);
-    const card = node.querySelector(".flip-card");
-    if (!card) {
-      console.error("Could not find .flip-card in template");
-      return;
-    }
-    card.dataset.movieIndex = String(index);
-
-    const movie = rec.movie;
-    const critic = criticLabel(movie);
-    const genreText = (movie.genres || []).slice(0, 3).join(", ");
-    const metaText = [movie.year || "Year unknown", genreText || null, critic].filter(Boolean).join(" \u2022 ");
-    const scoreText = `${Math.round(rec.score)}`;
-
-    // --- Front ---
-    const frontTitle = node.querySelector(".flip-front-title");
-    if (frontTitle) frontTitle.textContent = movie.title;
-
-    const frontMeta = node.querySelector(".flip-front-meta");
-    if (frontMeta) frontMeta.textContent = metaText;
-
-    const frontScore = node.querySelector(".flip-front-score");
-    if (frontScore) frontScore.textContent = scoreText;
-
-    // Poster image
-    const imageEl = node.querySelector(".cover-image");
-    const fallbackEl = node.querySelector(".cover-fallback");
-    const monogramEl = node.querySelector(".cover-monogram");
-    const yearEl = node.querySelector(".cover-year");
-
-    if (monogramEl) monogramEl.textContent = monogramFromTitle(movie.title || "Movie");
-    if (yearEl) yearEl.textContent = movie.year || "";
-
-    const posterUrl = (movie.poster_url || "").trim();
-    if (posterUrl && imageEl) {
-      imageEl.src = posterUrl;
-      imageEl.style.display = "block";
-      if (fallbackEl) fallbackEl.style.display = "none";
-      imageEl.onerror = () => {
-        imageEl.src = generatedPosterDataUrl(movie);
-      };
-    } else if (imageEl) {
-      imageEl.src = generatedPosterDataUrl(movie);
-      imageEl.style.display = "block";
-      if (fallbackEl) fallbackEl.style.display = "none";
-    }
-
-    // --- Back ---
-    const backTitles = node.querySelectorAll(".flip-card-back .title");
-    backTitles.forEach((el) => {
-      el.textContent = movie.title;
-      el.addEventListener("click", (e) => { e.stopPropagation(); openMovieModal(rec); });
-    });
-
-    const backScore = node.querySelector(".back-score");
-    if (backScore) backScore.textContent = scoreText;
-
-    const backMeta = node.querySelector(".back-meta");
-    if (backMeta) backMeta.textContent = metaText;
-
-    const overviewEl = node.querySelector(".overview");
-    if (overviewEl) overviewEl.textContent = movie.overview || "No overview available.";
-
-    const sourceLinksEl = node.querySelector(".source-links");
-    if (sourceLinksEl) {
-      getSourceLinks(movie).slice(0, 4).forEach((link) => {
-        const li = document.createElement("li");
-        const a = document.createElement("a");
-        a.href = link.url;
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
-        a.textContent = link.label;
-        a.className = `source-link ${link.cls}`;
-        a.addEventListener("click", (e) => e.stopPropagation());
-        li.appendChild(a);
-        sourceLinksEl.appendChild(li);
-      });
-    }
-
-    // --- Trailer embed on back ---
-    const trailerEmbed = node.querySelector(".trailer-embed");
-    let trailerLoaded = false;
-
-    // --- Flip on click ---
-    card.addEventListener("click", () => {
-      card.classList.toggle("flipped");
-      if (card.classList.contains("flipped") && trailerEmbed && !trailerLoaded) {
-        trailerLoaded = true;
-        loadTrailerEmbed(trailerEmbed, movie);
-      }
-    });
-
-    // --- Buttons ---
-    const likeBtn = node.querySelector(".like");
-    const dlBtn = node.querySelector(".download");
-    const dislikeBtn = node.querySelector(".dislike");
-
-    likeBtn.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      if (likeBtn.disabled) return;
-      likeBtn.disabled = true;
-      likeBtn.textContent = "...";
-      try {
-        await sendFeedback(movie, true);
-        const monRes = await fetch("/api/monitor", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: movie.title, year: movie.year }),
-        });
-        const monData = await monRes.json();
-        if (monData.status === "monitored") {
-          likeBtn.textContent = "✓ Monitoring";
-        } else if (monData.status === "exists") {
-          likeBtn.textContent = "✓ Liked";
-        } else {
-          likeBtn.textContent = "✓ Liked";
-        }
-        loadRadarrMonitored();
-      } catch (err) {
-        likeBtn.textContent = "Error";
-      }
-    });
-
-    if (dlBtn) {
-      dlBtn.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        if (dlBtn.disabled) return;
-        dlBtn.disabled = true;
-        dlBtn.textContent = "Sending...";
-        try {
-          const result = await sendDownload(movie);
-          if (result?.status === "queued") {
-            dlBtn.textContent = "\u2713 Queued!";
-          } else if (result?.status === "exists") {
-            dlBtn.textContent = "Already tracked";
-          } else if (result?.status === "error") {
-            dlBtn.textContent = "Error";
-            dlBtn.title = result.message || "Radarr error";
-          } else {
-            dlBtn.textContent = "\u2713 Sent";
-          }
-          await loadDownloadActivity();
-        } catch (err) {
-          dlBtn.textContent = "Failed";
-          dlBtn.title = err.message || "Download failed";
-        }
-      });
-    }
-
-    dislikeBtn.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      if (dislikeBtn.disabled) return;
-      dislikeBtn.disabled = true;
-      likeBtn.disabled = true;
-      try {
-        await sendFeedback(movie, false);
-        card.style.opacity = "0.5";
-        dislikeBtn.textContent = "Skipped";
-      } catch (err) {
-        dislikeBtn.textContent = "Error";
-      }
-    });
-
-    recsEl.appendChild(node);
-  });
+  currentRecommendations = Array.isArray(recommendations) ? recommendations : [];
+  renderAiSuggestions();
+  if (!currentRecommendations.length) return;
+  ensureRecommendationSentinel();
+  appendRecommendationBatch();
+  setupRecommendationObserver();
 }
 
 async function downloadAllMovies() {
@@ -1600,7 +2030,7 @@ function getClientFilters() {
 }
 
 function sortRecommendations(recommendations) {
-  const sortVal = sortSelect?.value || "score-desc";
+  const sortVal = sortSelect?.value || "year-desc";
   const sorted = [...recommendations];
   switch (sortVal) {
     case "score-desc":
@@ -1610,10 +2040,19 @@ function sortRecommendations(recommendations) {
       sorted.sort((a, b) => (a.score || 0) - (b.score || 0));
       break;
     case "year-desc":
-      sorted.sort((a, b) => (b.movie?.year || 0) - (a.movie?.year || 0));
+      sorted.sort((a, b) => movieReleaseSortValue(b.movie) - movieReleaseSortValue(a.movie));
       break;
     case "year-asc":
-      sorted.sort((a, b) => (a.movie?.year || 0) - (b.movie?.year || 0));
+      sorted.sort((a, b) => movieReleaseSortValue(a.movie) - movieReleaseSortValue(b.movie));
+      break;
+    case "release-upcoming":
+      return sorted
+        .filter((rec) => isUpcomingRelease(rec.movie))
+        .sort((a, b) => movieReleaseSortValue(a.movie) - movieReleaseSortValue(b.movie));
+    case "release-current":
+      return sorted
+        .filter((rec) => isCurrentRelease(rec.movie))
+        .sort((a, b) => movieReleaseSortValue(b.movie) - movieReleaseSortValue(a.movie));
       break;
     case "title-asc":
       sorted.sort((a, b) => (a.movie?.title || "").localeCompare(b.movie?.title || ""));
@@ -1660,12 +2099,22 @@ async function loadRecommendations() {
   const rawCount = Number.parseInt(countInput?.value, 10) || 12;
   const count = Math.max(1, Math.min(rawCount, MAX_RECOMMENDATION_COUNT));
   if (countInput) countInput.value = String(count);
+  const hiddenCountInput = countInput?.type === "hidden";
+  const displayLimit = hiddenCountInput ? MAX_RECOMMENDATION_COUNT : count;
 
   const recUrl = new URL("/api/recommendations", window.location.origin);
   recUrl.searchParams.set("user_id", user);
   const minScore = Number(minScoreEl?.value) || 0;
+  const sortVal = sortSelect?.value || "year-desc";
+  recUrl.searchParams.set("sort", sortVal);
+  const isDateSort = sortVal === "year-desc" || sortVal === "year-asc" || sortVal === "release-upcoming" || sortVal === "release-current";
   const fetchMultiplier = minScore > 0 ? 5 : 2;
-  recUrl.searchParams.set("count", String(Math.min(count * fetchMultiplier, MAX_RECOMMENDATION_COUNT)));
+  const fetchCount = hiddenCountInput
+    ? MAX_RECOMMENDATION_COUNT
+    : (isDateSort
+      ? MAX_RECOMMENDATION_COUNT
+      : Math.min(count * fetchMultiplier, MAX_RECOMMENDATION_COUNT));
+  recUrl.searchParams.set("count", String(fetchCount));
 
   const homeSources = activeHomeSourceQuery();
   if (homeSources) recUrl.searchParams.set("sources", homeSources);
@@ -1692,11 +2141,18 @@ async function loadRecommendations() {
     // Apply client-side filters and sorting
     let filtered = applyClientFilters(data.recommendations || []);
     filtered = sortRecommendations(filtered);
-    filtered = filtered.slice(0, count);
+    filtered = filtered.slice(0, displayLimit);
 
-    const heroRec = filtered[0] || null;
+    // Pick random movie from top 5 for hero section (Movie of the Day)
+    const heroPoolSize = Math.min(5, filtered.length);
+    const heroIndex = heroPoolSize > 0 ? Math.floor(Math.random() * heroPoolSize) : 0;
+    const heroRec = filtered[heroIndex] || null;
+
+    // Remove hero from grid to avoid duplication
+    const gridRecs = heroRec ? filtered.filter((_, i) => i !== heroIndex) : filtered;
+
     renderHeroMovie(heroRec);
-    renderRecommendations(heroRec ? filtered.slice(1) : filtered);
+    renderRecommendations(gridRecs);
 
     const prefAgent = (data.agents || []).find((a) => a.agent === "preferences");
     if (memoryCountEl) {
@@ -1709,17 +2165,34 @@ async function loadRecommendations() {
 
 function debouncedLoadRecommendations() {
   if (filterDebounceTimer) clearTimeout(filterDebounceTimer);
-  filterDebounceTimer = setTimeout(loadRecommendations, 200);
+  filterDebounceTimer = setTimeout(() => {
+    if (currentMood) {
+      loadMoodRecommendations();
+    } else {
+      loadRecommendations();
+    }
+  }, 200);
 }
 
 function clearAllFilters() {
   // Reset all filters
-  if (minScoreEl) minScoreEl.value = "";
+  if (minScoreEl) {
+    minScoreEl.value = "0";
+    const scoreDisplay = document.getElementById("score-display");
+    if (scoreDisplay) scoreDisplay.textContent = "Any";
+  }
   if (yearFromEl) yearFromEl.value = "";
   if (yearToEl) yearToEl.value = "";
   if (genreFilterEl) genreFilterEl.value = "";
   if (releaseFromEl) releaseFromEl.value = "";
   if (releaseToEl) releaseToEl.value = "";
+
+  // Reset era/decade buttons
+  document.querySelectorAll(".decade-btn, .era-btn, .era-pill").forEach((b) => b.classList.remove("active"));
+
+  // Reset mood
+  currentMood = null;
+  renderMoodChips();
 
   // Reset source selections to all
   homeSourceSelections.clear();
@@ -1731,6 +2204,50 @@ function clearAllFilters() {
 
 // ===== Movie Search =====
 let searchTimer = null;
+
+function movieKey(title, year) {
+  return `${String(title || "").trim().toLowerCase()}::${year || "na"}`;
+}
+
+function recommendationFromSearchResult(row) {
+  const movie = {
+    movie_id: row.tmdb_id ? `tmdb:${row.tmdb_id}` : `tmdb-search:${Date.now()}`,
+    title: row.title || "Unknown title",
+    year: row.year || null,
+    release_date: row.release_date || null,
+    poster_url: row.poster_url || null,
+    backdrop_url: row.backdrop_url || null,
+    rottentomatoes_score: null,
+    rogerebert_score: null,
+    genres: [],
+    overview: row.overview || "",
+    source_tags: ["tmdb"],
+    evidence: ["TMDB search result"],
+    available_on_plex: false,
+    available_on_radarr: false,
+    available_on_usenet: false,
+  };
+  return {
+    movie,
+    score: Number.isFinite(row.vote_average) ? Math.max(0, Math.min(row.vote_average * 10, 100)) : 50,
+    reasons: [
+      {
+        label: "TMDB",
+        value: 1.0,
+        detail: "Selected from TMDB search",
+      },
+    ],
+  };
+}
+
+function addSearchResultAsCard(row) {
+  const candidate = recommendationFromSearchResult(row);
+  const nextKey = movieKey(candidate.movie.title, candidate.movie.year);
+  const existing = (currentRecommendations || []).filter(
+    (rec) => movieKey(rec?.movie?.title, rec?.movie?.year) !== nextKey
+  );
+  renderRecommendations([candidate, ...existing]);
+}
 
 function closeSearch() {
   if (searchResultsEl) searchResultsEl.classList.remove("open");
@@ -1761,6 +2278,10 @@ async function performSearch(query) {
     data.results.forEach((m) => {
       const item = document.createElement("div");
       item.className = "search-result-item";
+      item.addEventListener("click", () => {
+        addSearchResultAsCard(m);
+        closeSearch();
+      });
 
       if (m.poster_url) {
         const img = document.createElement("img");
@@ -1794,7 +2315,7 @@ async function performSearch(query) {
       const addBtn = document.createElement("button");
       addBtn.className = "search-dl-btn search-add-btn";
       addBtn.textContent = "+ Add";
-      addBtn.title = "Add to Radarr";
+      addBtn.title = "Add to downloader";
       addBtn.addEventListener("click", async (e) => {
         e.stopPropagation();
         if (addBtn.disabled) return;
@@ -1852,6 +2373,14 @@ document.addEventListener("click", (e) => {
   }
 });
 
+window.addEventListener("scroll", () => {
+  if (!recommendationSentinel || renderedRecommendationCount >= currentRecommendations.length) return;
+  if (!recommendationScrollActivated && window.scrollY > 0) {
+    recommendationScrollActivated = true;
+  }
+  maybeAppendRecommendationBatch();
+}, { passive: true });
+
 // Event Listeners
 document.getElementById("refresh")?.addEventListener("click", loadRecommendations);
 refreshDownloadsBtn?.addEventListener("click", loadDownloadActivity);
@@ -1864,6 +2393,18 @@ countInput?.addEventListener("input", debouncedLoadRecommendations);
 countInput?.addEventListener("change", debouncedLoadRecommendations);
 minScoreEl?.addEventListener("input", debouncedLoadRecommendations);
 minScoreEl?.addEventListener("change", debouncedLoadRecommendations);
+
+// Score slider display update
+const scoreDisplayEl = document.getElementById("score-display");
+function updateScoreDisplay() {
+  if (!minScoreEl || !scoreDisplayEl) return;
+  const val = Number(minScoreEl.value) || 0;
+  scoreDisplayEl.textContent = val === 0 ? "Any" : `${val}+`;
+}
+if (minScoreEl) {
+  minScoreEl.addEventListener("input", updateScoreDisplay);
+  updateScoreDisplay();
+}
 yearFromEl?.addEventListener("input", debouncedLoadRecommendations);
 yearFromEl?.addEventListener("change", debouncedLoadRecommendations);
 yearToEl?.addEventListener("input", debouncedLoadRecommendations);
@@ -1873,6 +2414,186 @@ genreFilterEl?.addEventListener("change", debouncedLoadRecommendations);
 
 sortSelect?.addEventListener("change", debouncedLoadRecommendations);
 clearAllFiltersBtn?.addEventListener("click", clearAllFilters);
+
+// Era/Decade quick-filter buttons
+document.querySelectorAll(".decade-btn, .era-btn, .era-pill").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const from = btn.dataset.from;
+    const to = btn.dataset.to;
+    const isActive = btn.classList.contains("active");
+
+    // Toggle - if already active, clear it
+    if (isActive) {
+      btn.classList.remove("active");
+      if (yearFromEl) yearFromEl.value = "";
+      if (yearToEl) yearToEl.value = "";
+    } else {
+      // Update the year inputs
+      if (yearFromEl) yearFromEl.value = from;
+      if (yearToEl) yearToEl.value = to;
+
+      // Toggle active state
+      document.querySelectorAll(".decade-btn, .era-btn, .era-pill").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+    }
+
+    // Reload recommendations
+    debouncedLoadRecommendations();
+  });
+});
+
+// ===== Mood-Based Discovery =====
+const moodChipsEl = document.getElementById("mood-chips");
+let currentMood = null;
+let availableMoods = [];
+
+let suggestedMoods = [];
+
+async function loadMoods() {
+  if (!moodChipsEl) return;
+  try {
+    const res = await fetch("/api/moods");
+    const data = await res.json();
+    if (data.ok && data.moods) {
+      availableMoods = data.moods;
+      renderMoodChips();
+    }
+  } catch (err) {
+    console.error("Failed to load moods:", err);
+  }
+}
+
+async function loadSuggestedMoods() {
+  try {
+    const res = await fetch(`/api/moods/infer/${currentUserId()}`);
+    const data = await res.json();
+    if (data.ok && data.suggested_moods && data.suggested_moods.length > 0) {
+      suggestedMoods = data.suggested_moods;
+      renderMoodChips(); // Re-render with suggestions
+    }
+  } catch (err) {
+    console.error("Failed to load suggested moods:", err);
+  }
+}
+
+function renderMoodChips() {
+  if (!moodChipsEl) return;
+  moodChipsEl.innerHTML = "";
+
+  // Create mood card helper
+  const createMoodCard = (emoji, label, isActive, onClick, isSuggested = false) => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = `mood-card ${isActive ? "active" : ""} ${isSuggested ? "suggested" : ""}`;
+    card.innerHTML = `
+      <span class="mood-emoji">${emoji}</span>
+      <span class="mood-label">${label}</span>
+      ${isSuggested ? '<span class="mood-suggested-badge">For You</span>' : ""}
+    `;
+    card.addEventListener("click", onClick);
+    return card;
+  };
+
+  // "All" card
+  moodChipsEl.appendChild(
+    createMoodCard("🎬", "All", !currentMood, () => {
+      currentMood = null;
+      renderMoodChips();
+      debouncedLoadRecommendations();
+    })
+  );
+
+  // Get suggested mood names
+  const suggestedNames = new Set(suggestedMoods.map(m => m.name));
+
+  // Show suggested moods first (if any)
+  if (suggestedMoods.length > 0) {
+    suggestedMoods.forEach((suggested) => {
+      const mood = availableMoods.find(m => m.name === suggested.name);
+      if (mood) {
+        moodChipsEl.appendChild(
+          createMoodCard(mood.emoji, mood.display_name, currentMood === mood.name, () => {
+            currentMood = currentMood === mood.name ? null : mood.name;
+            renderMoodChips();
+            loadMoodRecommendations();
+          }, true)
+        );
+      }
+    });
+  }
+
+  // Mood cards - show all in horizontal scroll (excluding already shown suggested)
+  availableMoods.forEach((mood) => {
+    if (suggestedNames.has(mood.name)) return; // Skip if already shown as suggested
+    moodChipsEl.appendChild(
+      createMoodCard(mood.emoji, mood.display_name, currentMood === mood.name, () => {
+        currentMood = currentMood === mood.name ? null : mood.name;
+        renderMoodChips();
+        loadMoodRecommendations();
+      })
+    );
+  });
+}
+
+async function loadMoodRecommendations() {
+  if (!currentMood) {
+    loadRecommendations();
+    return;
+  }
+
+  if (recsEl) {
+    clearRecommendationsMessage('<div class="meta" style="text-align: center; padding: 40px;">Loading mood recommendations...</div>');
+  }
+
+  try {
+    const rawCount = Number.parseInt(countInput?.value || "24", 10);
+    const count = Math.max(1, Math.min(Number.isFinite(rawCount) ? rawCount : 24, MAX_RECOMMENDATION_COUNT));
+    const displayLimit = countInput?.type === "hidden" ? MAX_RECOMMENDATION_COUNT : count;
+    const moodUrl = new URL(`/api/recommendations/mood/${currentMood}`, window.location.origin);
+    moodUrl.searchParams.set("user_id", currentUserId());
+    moodUrl.searchParams.set("count", String(displayLimit));
+    const yearFrom = Number(yearFromEl?.value) || 0;
+    const yearTo = Number(yearToEl?.value) || 0;
+    if (yearFrom > 0) moodUrl.searchParams.set("year_from", String(yearFrom));
+    if (yearTo > 0) moodUrl.searchParams.set("year_to", String(yearTo));
+    const res = await fetch(moodUrl.toString());
+    const data = await res.json();
+
+    if (data.ok && data.recommendations) {
+      // Transform recommendations to match expected format
+      const transformed = data.recommendations.map((r) => ({
+        ...r,
+        score: r.mood_score || r.score || 0,
+      }));
+      let filtered = applyClientFilters(transformed);
+      filtered = sortRecommendations(filtered);
+      filtered = filtered.slice(0, displayLimit);
+
+      if (filtered.length === 0) {
+        clearRecommendationsMessage(`<div class="meta" style="text-align: center; padding: 40px;">No ${currentMood} movies for this decade filter.</div>`);
+        renderHeroMovie(null);
+        return;
+      }
+
+      const heroIndex = Math.floor(Math.random() * Math.min(5, filtered.length));
+      const heroRec = filtered[heroIndex] || null;
+      const gridRecs = heroRec ? filtered.filter((_, i) => i !== heroIndex) : filtered;
+
+      renderHeroMovie(heroRec);
+      renderRecommendations(gridRecs);
+    } else {
+      clearRecommendationsMessage(`<div class="meta" style="text-align: center; padding: 40px;">No movies found for "${currentMood}" mood</div>`);
+      renderHeroMovie(null);
+    }
+  } catch (err) {
+    console.error("Failed to load mood recommendations:", err);
+    clearRecommendationsMessage('<div class="meta" style="text-align: center; padding: 40px;">Error loading recommendations</div>');
+    renderHeroMovie(null);
+  }
+}
+
+// Initialize moods on load
+loadMoods();
 
 // Auto-refresh downloads when active
 let downloadRefreshInterval = null;
@@ -1890,12 +2611,509 @@ function stopDownloadAutoRefresh() {
   }
 }
 
+// ===== AI Chat =====
+const aiChatCard = document.getElementById("ai-chat-card");
+const aiChatToggle = document.getElementById("ai-chat-toggle");
+const aiChatInput = document.getElementById("ai-chat-input");
+const aiChatSend = document.getElementById("ai-chat-send");
+const aiChatMessages = document.getElementById("ai-chat-messages");
+const aiStatus = document.getElementById("ai-status");
+const aiSuggestionChipsEl = document.getElementById("ai-suggestion-chips");
+const aiFeaturedMovieEl = document.getElementById("ai-featured-movie");
+
+const DEFAULT_AI_SUGGESTIONS = [
+  {
+    label: "Tonight Pick",
+    prompt: "Pick one movie from my recommendations for tonight. Format exactly: Pick: <title> (<year>) - <one short reason>.",
+  },
+  {
+    label: "Backup Pick",
+    prompt: "Give one backup movie from my recommendations. Format exactly: Backup: <title> (<year>) - <one short reason>.",
+  },
+  {
+    label: "Different Vibe",
+    prompt: "Give one alternative with a different vibe from my top pick. Format exactly: Alt: <title> (<year>) - <one short reason>.",
+  },
+];
+
+function recMovie(rec) {
+  if (!rec || typeof rec !== "object") return null;
+  if (rec.movie && typeof rec.movie === "object") return rec.movie;
+  return rec;
+}
+
+function formatRecLabel(rec) {
+  const movie = recMovie(rec);
+  if (!movie?.title) return null;
+  return movie.year ? `${movie.title} (${movie.year})` : movie.title;
+}
+
+function stripMovieYear(label) {
+  return String(label || "").replace(/\s*\(\d{4}\)\s*$/, "").trim();
+}
+
+function clipChipLabel(text, limit = 18) {
+  const raw = String(text || "").trim();
+  if (raw.length <= limit) return raw;
+  return `${raw.slice(0, limit - 1).trimEnd()}…`;
+}
+
+function normalizeAiResponse(raw) {
+  const text = String(raw || "").replace(/\s+/g, " ").trim();
+  if (!text) return "No response";
+  if (text.length <= 220) return text;
+  return `${text.slice(0, 217).trimEnd()}...`;
+}
+
+function findRecommendationFromText(raw) {
+  const responseText = String(raw || "").toLowerCase();
+  if (!responseText || !Array.isArray(currentRecommendations) || !currentRecommendations.length) return null;
+  const candidates = currentRecommendations
+    .map((rec) => ({ rec, title: String(recMovie(rec)?.title || "").trim() }))
+    .filter((item) => item.title.length > 1)
+    .sort((a, b) => b.title.length - a.title.length);
+
+  for (const item of candidates) {
+    if (responseText.includes(item.title.toLowerCase())) return item.rec;
+  }
+  return null;
+}
+
+function buildAiContext() {
+  const parts = [];
+  if (currentMood) parts.push(`mood:${currentMood}`);
+  if (yearFromEl?.value) parts.push(`year_from:${yearFromEl.value}`);
+  if (yearToEl?.value) parts.push(`year_to:${yearToEl.value}`);
+
+  const topTitles = (currentRecommendations || [])
+    .slice(0, 3)
+    .map((rec) => formatRecLabel(rec))
+    .filter(Boolean);
+
+  if (topTitles.length) {
+    parts.push(`top:${topTitles.join(" | ")}`);
+  }
+  parts.push("reply_style: short; choose one movie title from current recommendations when possible");
+  return parts.join("; ");
+}
+
+function buildAiSuggestions() {
+  const dynamic = [];
+  const topMovie = formatRecLabel(currentRecommendations?.[0]);
+  const secondMovie = formatRecLabel(currentRecommendations?.[1]);
+  const thirdMovie = formatRecLabel(currentRecommendations?.[2]);
+
+  const topTitle = clipChipLabel(stripMovieYear(topMovie), 11);
+  const secondTitle = clipChipLabel(stripMovieYear(secondMovie), 11);
+  const thirdTitle = clipChipLabel(stripMovieYear(thirdMovie), 11);
+
+  if (topMovie && topTitle) {
+    dynamic.push({
+      label: `Pick ${topTitle}`,
+      prompt: `Should I watch ${topMovie} tonight? Format exactly: Pick: ${topMovie} - <one short reason>.`,
+      movieIndex: 0,
+    });
+  }
+  if (topMovie && secondMovie && topTitle && secondTitle) {
+    dynamic.push({
+      label: `Backup ${secondTitle}`,
+      prompt: `If ${topMovie} is unavailable, pick a backup from my current recommendations, preferably ${secondMovie}. Format exactly: Backup: <title> (<year>) - <one short reason>.`,
+      movieIndex: 1,
+    });
+  }
+  if (thirdMovie && thirdTitle) {
+    dynamic.push({
+      label: `Alt ${thirdTitle}`,
+      prompt: `Give one alternative with a different vibe, leaning toward ${thirdMovie}. Format exactly: Alt: <title> (<year>) - <one short reason>.`,
+      movieIndex: 2,
+    });
+  }
+
+  const merged = dynamic.length ? dynamic : DEFAULT_AI_SUGGESTIONS;
+  return merged
+    .filter((item) => item?.label && item?.prompt)
+    .slice(0, 3);
+}
+
+function renderAiSuggestions() {
+  if (!aiSuggestionChipsEl) return;
+  aiSuggestionChipsEl.innerHTML = "";
+
+  if (aiFeaturedMovieEl) {
+    const topMovie = recMovie(currentRecommendations?.[0]);
+    if (topMovie?.title) {
+      renderAiFeaturedMovie(currentRecommendations[0], "Recommended now");
+    } else {
+      aiFeaturedMovieEl.hidden = true;
+      aiFeaturedMovieEl.innerHTML = "";
+    }
+  }
+
+  const suggestions = buildAiSuggestions();
+  suggestions.forEach((suggestion) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ai-suggestion-chip";
+    button.textContent = suggestion.label;
+    button.title = suggestion.prompt;
+    button.addEventListener("click", () => {
+      if (Number.isInteger(suggestion.movieIndex)) {
+        renderAiFeaturedMovie(currentRecommendations?.[suggestion.movieIndex], "Selected pick");
+      }
+      sendAiMessage(suggestion.prompt);
+    });
+    aiSuggestionChipsEl.appendChild(button);
+  });
+}
+
+function renderAiFeaturedMovie(rec, reason = "Recommended now") {
+  if (!aiFeaturedMovieEl) return;
+  const movie = recMovie(rec);
+  if (!movie?.title) {
+    aiFeaturedMovieEl.hidden = true;
+    aiFeaturedMovieEl.innerHTML = "";
+    return;
+  }
+
+  aiFeaturedMovieEl.hidden = false;
+  aiFeaturedMovieEl.innerHTML = "";
+
+  const poster = document.createElement("img");
+  poster.className = "ai-featured-poster";
+  poster.alt = `${movie.title} poster`;
+  poster.src = (movie.poster_url || "").trim() || generatedPosterDataUrl(movie);
+  poster.addEventListener("error", () => {
+    poster.src = generatedPosterDataUrl(movie);
+  });
+
+  const details = document.createElement("div");
+  details.className = "ai-featured-details";
+
+  const title = document.createElement("div");
+  title.className = "ai-featured-title";
+  title.textContent = titleWithSource(movie);
+
+  const meta = document.createElement("div");
+  meta.className = "ai-featured-meta";
+  const score = Number.isFinite(rec?.score) ? `Score ${Math.round(rec.score)}` : null;
+  const origin = sourceOriginText(movie);
+  meta.textContent = [movie.year || null, criticLabel(movie), score, origin ? `From ${origin}` : null]
+    .filter(Boolean)
+    .join(" • ");
+
+  const reasonText = document.createElement("div");
+  reasonText.className = "ai-featured-reason";
+  reasonText.textContent = reason;
+
+  const actions = document.createElement("div");
+  actions.className = "ai-featured-actions";
+
+  const detailsBtn = document.createElement("button");
+  detailsBtn.type = "button";
+  detailsBtn.className = "btn btn-ghost btn-sm";
+  detailsBtn.textContent = "Details";
+  detailsBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    openMovieModal(rec);
+  });
+
+  const downloadBtn = document.createElement("button");
+  downloadBtn.type = "button";
+  downloadBtn.className = "btn btn-primary btn-sm";
+  downloadBtn.textContent = "Download";
+  downloadBtn.addEventListener("click", async (event) => {
+    event.stopPropagation();
+    if (downloadBtn.disabled) return;
+    downloadBtn.disabled = true;
+    downloadBtn.textContent = "...";
+    try {
+      const result = await sendDownload(movie);
+      if (result?.status === "queued") {
+        downloadBtn.textContent = "Queued";
+      } else if (result?.status === "exists") {
+        downloadBtn.textContent = "Tracked";
+      } else {
+        downloadBtn.textContent = "Done";
+      }
+      await loadDownloadActivity();
+    } catch {
+      downloadBtn.textContent = "Error";
+    }
+  });
+
+  actions.appendChild(detailsBtn);
+  actions.appendChild(downloadBtn);
+
+  details.appendChild(title);
+  details.appendChild(meta);
+  details.appendChild(reasonText);
+  aiFeaturedMovieEl.appendChild(poster);
+  aiFeaturedMovieEl.appendChild(details);
+  aiFeaturedMovieEl.appendChild(actions);
+  aiFeaturedMovieEl.title = "Open movie details";
+  aiFeaturedMovieEl.style.cursor = "pointer";
+  aiFeaturedMovieEl.onclick = () => openMovieModal(rec);
+}
+
+// Initialize collapsed state from localStorage
+const aiChatCollapsed = localStorage.getItem("ai-chat-collapsed") === "true";
+if (aiChatCollapsed && aiChatCard) {
+  aiChatCard.classList.add("collapsed");
+}
+
+function toggleAiChat() {
+  if (!aiChatCard) return;
+  aiChatCard.classList.toggle("collapsed");
+  aiChatCard.classList.toggle("expanded", !aiChatCard.classList.contains("collapsed"));
+  localStorage.setItem("ai-chat-collapsed", aiChatCard.classList.contains("collapsed"));
+}
+
+aiChatToggle?.addEventListener("click", (e) => {
+  // Don't toggle if clicking on input or buttons inside
+  if (e.target.closest(".ai-chat-input-wrapper")) return;
+  toggleAiChat();
+});
+
+function addChatMessage(content, role, sources = []) {
+  const msg = document.createElement("div");
+  msg.className = `ai-chat-message ${role}`;
+  msg.textContent = content;
+
+  if (sources.length > 0) {
+    const sourcesEl = document.createElement("div");
+    sourcesEl.className = "ai-chat-sources";
+    sourcesEl.textContent = `Queried: ${sources.join(", ")}`;
+    msg.appendChild(sourcesEl);
+  }
+
+  aiChatMessages?.appendChild(msg);
+  aiChatMessages?.scrollTo({ top: aiChatMessages.scrollHeight, behavior: "smooth" });
+  return msg;
+}
+
+async function sendAiMessage(presetMessage = null) {
+  const isQuickPick = typeof presetMessage === "string" && presetMessage.trim().length > 0;
+  const message = String(presetMessage ?? aiChatInput?.value ?? "").trim();
+  if (!message) return;
+
+  // Expand chat when sending
+  aiChatCard?.classList.remove("collapsed");
+  aiChatCard?.classList.add("expanded");
+
+  if (aiChatInput) aiChatInput.value = "";
+  if (!isQuickPick) {
+    addChatMessage(message, "user");
+  }
+
+  const loadingMsg = addChatMessage("Picking...", "loading");
+
+  try {
+    const res = await fetch("/api/ai/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, context: buildAiContext() }),
+    });
+    const data = await res.json();
+
+    loadingMsg.remove();
+    const responseText = normalizeAiResponse(data.response || "No response");
+    addChatMessage(responseText, "assistant", data.sources_queried || []);
+    const mentionedRec = findRecommendationFromText(data.response);
+    if (mentionedRec) {
+      renderAiFeaturedMovie(mentionedRec, "AI pick");
+    }
+  } catch (err) {
+    loadingMsg.remove();
+    addChatMessage(`Error: ${err.message}`, "assistant");
+  }
+}
+
+aiChatSend?.addEventListener("click", sendAiMessage);
+aiChatInput?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendAiMessage();
+  }
+});
+
+// Focus input expands the chat
+aiChatInput?.addEventListener("focus", () => {
+  aiChatCard?.classList.remove("collapsed");
+  aiChatCard?.classList.add("expanded");
+});
+
+async function checkAiStatus() {
+  if (!aiStatus) return;
+  try {
+    const res = await fetch("/api/integrations");
+    const data = await res.json();
+    if (data.ollama) {
+      aiStatus.textContent = "Ready";
+      aiStatus.className = "ai-status-badge connected";
+    } else {
+      aiStatus.textContent = "Setup";
+      aiStatus.className = "ai-status-badge disconnected";
+    }
+  } catch {
+    aiStatus.textContent = "Offline";
+    aiStatus.className = "ai-status-badge disconnected";
+  }
+}
+
+// === Year Picker Logic ===
+const yearSlider = document.getElementById("year-slider");
+const yearDisplay = document.getElementById("year-display");
+const clearYearBtn = document.getElementById("clear-year-btn");
+const decadeChips = document.querySelectorAll(".decade-chip");
+const resultsCountEl = document.getElementById("results-count");
+const loadAllBtn = document.getElementById("load-all-btn");
+
+let selectedYear = null;
+let selectedDecade = null;
+
+function updateYearDisplay(year, isDecade = false) {
+  if (!yearDisplay) return;
+  if (year === null) {
+    yearDisplay.textContent = "Any Year";
+    yearDisplay.style.color = "var(--text-muted)";
+  } else if (isDecade) {
+    yearDisplay.textContent = `${year}s`;
+    yearDisplay.style.color = "var(--primary)";
+  } else {
+    yearDisplay.textContent = year;
+    yearDisplay.style.color = "var(--primary)";
+  }
+}
+
+function updateResultsCount(shown, total, yearLabel = null) {
+  if (!resultsCountEl) return;
+  if (total === 0) {
+    resultsCountEl.innerHTML = "";
+    return;
+  }
+  const label = yearLabel ? ` from <strong>${yearLabel}</strong>` : "";
+  if (shown < total) {
+    resultsCountEl.innerHTML = `Showing <strong>${shown}</strong> of <strong>${total}</strong> movies${label}`;
+    if (loadAllBtn) loadAllBtn.style.display = "inline-block";
+  } else {
+    resultsCountEl.innerHTML = `<strong>${total}</strong> movies${label}`;
+    if (loadAllBtn) loadAllBtn.style.display = "none";
+  }
+}
+
+function clearDecadeChipActive() {
+  decadeChips.forEach((chip) => chip.classList.remove("active"));
+}
+
+function applyYearFilter(yearFrom, yearTo) {
+  // Set hidden inputs for the recommendation API
+  if (yearFromEl) yearFromEl.value = yearFrom || "";
+  if (yearToEl) yearToEl.value = yearTo || "";
+  // Trigger recommendations reload
+  loadRecommendations();
+}
+
+function handleYearSliderRelease() {
+  const year = parseInt(yearSlider.value, 10);
+  selectedYear = year;
+  selectedDecade = null;
+  clearDecadeChipActive();
+  updateYearDisplay(year);
+  // Filter to just this year
+  applyYearFilter(year, year);
+}
+
+function handleDecadeClick(decade) {
+  selectedDecade = decade;
+  selectedYear = null;
+  clearDecadeChipActive();
+
+  if (decade === "classic") {
+    // Classic = pre-1970
+    updateYearDisplay("Classic");
+    applyYearFilter(1900, 1969);
+  } else {
+    const decadeStart = parseInt(decade, 10);
+    const decadeEnd = decadeStart + 9;
+    if (yearSlider) yearSlider.value = decadeStart;
+    updateYearDisplay(decadeStart, true);
+    applyYearFilter(decadeStart, decadeEnd);
+  }
+
+  decadeChips.forEach((chip) => {
+    if (chip.dataset.decade === decade) {
+      chip.classList.add("active");
+    }
+  });
+}
+
+function clearYearFilter() {
+  selectedYear = null;
+  selectedDecade = null;
+  clearDecadeChipActive();
+  updateYearDisplay(null);
+  if (yearSlider) yearSlider.value = 2026;
+  applyYearFilter(null, null);
+}
+
+// Event listeners for year picker
+if (yearSlider) {
+  // Update display as user drags
+  yearSlider.addEventListener("input", () => {
+    updateYearDisplay(parseInt(yearSlider.value, 10));
+  });
+  // Fetch when user releases slider
+  yearSlider.addEventListener("change", handleYearSliderRelease);
+}
+
+if (clearYearBtn) {
+  clearYearBtn.addEventListener("click", clearYearFilter);
+}
+
+decadeChips.forEach((chip) => {
+  chip.addEventListener("click", () => {
+    handleDecadeClick(chip.dataset.decade);
+  });
+});
+
+if (loadAllBtn) {
+  loadAllBtn.addEventListener("click", () => {
+    // Render all remaining cards
+    while (renderedRecommendationCount < currentRecommendations.length) {
+      appendRecommendationBatch();
+    }
+    const yearLabel = selectedYear || (selectedDecade ? `${selectedDecade}s` : null);
+    updateResultsCount(renderedRecommendationCount, currentRecommendations.length, yearLabel);
+  });
+}
+
+// Update results count after recommendations render
+const originalRenderRecommendations = renderRecommendations;
+renderRecommendations = function(recommendations) {
+  originalRenderRecommendations(recommendations);
+  const yearLabel = selectedYear || (selectedDecade ? `${selectedDecade}s` : null);
+  setTimeout(() => {
+    updateResultsCount(renderedRecommendationCount, currentRecommendations.length, yearLabel);
+  }, 100);
+};
+
 // Initialize
 (async function init() {
   initTheme();
   renderHomeSourceFilters();
-  await Promise.all([fetchIntegrations(), loadDownloadActivity(), loadRadarrMonitored(), updateStatusBanner()]);
+  renderAiSuggestions();
+  await Promise.all([
+    fetchIntegrations(),
+    loadDownloadActivity(),
+    loadRadarrMonitored(),
+    updateStatusBanner(),
+    checkAiStatus(),
+    loadMoods(),
+  ]);
   await loadRecommendations();
+
+  // Load suggested moods after recommendations (needs feedback data)
+  loadSuggestedMoods();
 
   // Start auto-refresh for downloads
   startDownloadAutoRefresh();

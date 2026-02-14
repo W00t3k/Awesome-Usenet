@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+import re
 
 from app.models import MovieCandidate, Recommendation, RecommendationReason
 from app.services.memory_store import MemoryStore
+
+TV_EPISODE_PATTERN = re.compile(r"\bS\d{1,4}E\d{1,3}\b|\b\d{1,2}x\d{1,3}\b", re.I)
 
 
 @dataclass
@@ -23,6 +26,7 @@ class Recommender:
         user_id: str,
         source_movies: dict[str, list[MovieCandidate]],
         top_n: int,
+        sort_mode: str | None = None,
         required_sources: set[str] | None = None,
         release_date_from: date | None = None,
         release_date_to: date | None = None,
@@ -51,7 +55,7 @@ class Recommender:
             score, reasons = await self._score_movie(user_id, movie)
             scored.append(ScoredMovie(movie=movie, score=score, reasons=reasons))
 
-        scored.sort(key=lambda item: item.score, reverse=True)
+        scored = self._sort_scored_movies(scored, sort_mode)
         return [
             Recommendation(
                 movie=item.movie,
@@ -60,6 +64,51 @@ class Recommender:
             )
             for item in scored[:top_n]
         ]
+
+    @staticmethod
+    def _release_sort_key(movie: MovieCandidate) -> tuple[int, int]:
+        release = Recommender._coerce_release_date(movie.release_date)
+        if release is not None:
+            return (2, release.toordinal())
+        if movie.year is not None and movie.year > 0:
+            return (1, date(movie.year, 1, 1).toordinal())
+        return (0, -1)
+
+    @staticmethod
+    def _sort_scored_movies(
+        scored: list[ScoredMovie],
+        sort_mode: str | None,
+    ) -> list[ScoredMovie]:
+        mode = (sort_mode or "score-desc").strip().lower()
+        today = datetime.now(UTC).date()
+
+        if mode == "year-desc":
+            return sorted(scored, key=lambda item: (Recommender._release_sort_key(item.movie), item.score), reverse=True)
+
+        if mode == "year-asc":
+            return sorted(scored, key=lambda item: (Recommender._release_sort_key(item.movie), -item.score))
+
+        if mode == "release-upcoming":
+            upcoming = []
+            for item in scored:
+                release = Recommender._coerce_release_date(item.movie.release_date)
+                if release is None or release < today:
+                    continue
+                upcoming.append((item, release))
+            upcoming.sort(key=lambda pair: (pair[1], -pair[0].score))
+            return [pair[0] for pair in upcoming]
+
+        if mode == "release-current":
+            released = []
+            for item in scored:
+                release = Recommender._coerce_release_date(item.movie.release_date)
+                if release is None or release >= today:
+                    continue
+                released.append((item, release))
+            released.sort(key=lambda pair: (pair[1], pair[0].score), reverse=True)
+            return [pair[0] for pair in released]
+
+        return sorted(scored, key=lambda item: item.score, reverse=True)
 
     @staticmethod
     def _score_to_hundred(raw_score: float) -> float:
@@ -93,6 +142,8 @@ class Recommender:
         merged: dict[str, MovieCandidate] = {}
         for agent_name, movies in source_movies.items():
             for movie in movies:
+                if movie.available_on_usenet and Recommender._looks_like_tv_episode(movie.title):
+                    continue
                 if agent_name not in movie.source_tags:
                     movie.source_tags = sorted(set(movie.source_tags + [agent_name]))
                 key = Recommender._title_year_key(movie.title, movie.year)
@@ -131,6 +182,10 @@ class Recommender:
     @staticmethod
     def _title_year_key(title: str, year: int | None) -> str:
         return f"{title.strip().lower()}::{year if year is not None else 'na'}"
+
+    @staticmethod
+    def _looks_like_tv_episode(title: str) -> bool:
+        return bool(TV_EPISODE_PATTERN.search(title or ""))
 
     @staticmethod
     def _movie_matches_sources(movie: MovieCandidate, required_sources: set[str]) -> bool:

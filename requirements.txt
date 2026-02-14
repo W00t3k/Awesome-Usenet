@@ -6,3 +6,11 @@ pydantic>=2.11.7
 pydantic-settings>=2.10.1
 python-dotenv>=1.1.1
 numpy>=2.3.2
+
+# Background jobs (optional - graceful fallback if not installed)
+rq>=2.0.0
+redis>=5.0.0
+rq-scheduler>=0.13.0
+
+# Web scraping for catalog sync (optional)
+beautifulsoup4>=4.12.0

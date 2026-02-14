@@ -17,22 +17,55 @@ class UsenetClient:
             return self._base_url
         return f"{self._base_url}/api"
 
-    async def movie_search(self, query: str = "") -> list[dict]:
-        params = {
-            "apikey": self._api_key,
+    def _search_endpoint_and_params(
+        self, query: str = "", offset: int = 0, limit: int = 100
+    ) -> tuple[str, dict[str, str | int]]:
+        parsed = urlparse(self._base_url)
+        base_params = dict(parse_qsl(parsed.query, keep_blank_values=True))
+
+        # Strip query/fragment and normalize the API endpoint path.
+        endpoint = urlunparse(parsed._replace(query="", fragment="")).rstrip("/")
+        if not endpoint.lower().endswith("/api"):
+            endpoint = f"{endpoint}/api"
+
+        params: dict[str, str | int] = {
             "t": "search",
             "cat": "2000",  # Movies category (Newznab)
-            "q": query,
             "o": "json",
-            "limit": 100,
+            "limit": limit,
+            "offset": offset,
         }
+        if query.strip():
+            params["q"] = query.strip()
+        if self._api_key:
+            params["apikey"] = self._api_key
+
+        # Preserve explicit query-string defaults from base_url (for providers that require them).
+        params.update(base_params)
+
+        # Explicit function arguments / configured key always win.
+        if query.strip():
+            params["q"] = query.strip()
+        if self._api_key:
+            params["apikey"] = self._api_key
+        params["limit"] = limit
+        params["offset"] = offset
+
+        return endpoint, params
+
+    async def movie_search(
+        self, query: str = "", offset: int = 0, limit: int = 100
+    ) -> list[dict]:
+        endpoint, params = self._search_endpoint_and_params(
+            query=query, offset=offset, limit=limit
+        )
         try:
             payload = await self._http.get_json(
-                self._api_endpoint(),
+                endpoint,
                 params=params,
             )
         except ValueError:
-            xml_text = await self._http.get_text(self._api_endpoint(), params=params)
+            xml_text = await self._http.get_text(endpoint, params=params)
             return self._parse_rss_items(xml_text)
 
         items = payload.get("channel", {}).get("item", [])
@@ -41,6 +74,22 @@ class UsenetClient:
         if isinstance(items, dict):
             return [items]
         return []
+
+    async def movie_search_all(
+        self, query: str = "", max_results: int = 1000, batch_size: int = 100
+    ) -> list[dict]:
+        """Fetch ALL search results with pagination."""
+        all_items: list[dict] = []
+        offset = 0
+        while len(all_items) < max_results:
+            batch = await self.movie_search(query=query, offset=offset, limit=batch_size)
+            if not batch:
+                break
+            all_items.extend(batch)
+            if len(batch) < batch_size:
+                break
+            offset += batch_size
+        return all_items[:max_results]
 
     async def movie_rss_feed(self, rss_url: str, api_key: str | None = None) -> list[dict]:
         resolved_url = self._resolve_rss_url(rss_url=rss_url, api_key=api_key or self._api_key)
@@ -67,9 +116,20 @@ class UsenetClient:
 
     @staticmethod
     def _parse_rss_items(xml_text: str) -> list[dict]:
-        root = ElementTree.fromstring(xml_text)
+        try:
+            root = ElementTree.fromstring(xml_text)
+        except ElementTree.ParseError as exc:
+            # Some indexers return HTML error pages instead of XML
+            raise ValueError(f"Invalid XML from indexer: {exc}") from exc
+
         channel = root.find("channel")
         if channel is None:
+            # Try Newznab error response: <error code="..." description="..."/>
+            error_el = root.find("error")
+            if error_el is not None:
+                code = error_el.get("code", "?")
+                desc = error_el.get("description", "unknown error")
+                raise ValueError(f"Indexer error {code}: {desc}")
             raise ValueError("Invalid RSS payload: missing channel node")
 
         items: list[dict] = []

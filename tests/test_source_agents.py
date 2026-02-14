@@ -145,9 +145,15 @@ async def test_drunkenslug_agent_collects_movie_candidates() -> None:
         assert query == ""
         return [
             {
+                "title": "The.Huckleberry.Hound.Show.S01E04.FLAC2.0.HDTV",
+                "description": "Should be excluded",
+                "link": "https://drunkenslug.com/details/skip",
+            },
+            {
                 "title": "Anora.2025.1080p.BluRay.x265",
                 "description": "Example DS item",
                 "link": "https://drunkenslug.com/details/123",
+                "pubDate": "Fri, 13 Feb 2026 12:00:00 +0000",
             }
         ]
 
@@ -155,6 +161,8 @@ async def test_drunkenslug_agent_collects_movie_candidates() -> None:
 
     payload = await agent.collect(_context())
     assert payload.movies
+    assert len(payload.movies) == 1
     assert payload.movies[0].title == "Anora"
     assert payload.movies[0].year == 2025
     assert "drunkenslug" in payload.movies[0].source_tags
+    assert any(e.startswith("DrunkenSlug item date:") for e in payload.movies[0].evidence)

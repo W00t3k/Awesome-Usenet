@@ -247,6 +247,137 @@
       gap: 8px;
     }
 
+    .integration-verbose {
+      grid-column: 1 / -1;
+      margin-top: 10px;
+      padding: 10px 12px;
+      background: #121212;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: #cfd3dc;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 11px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      overflow-x: auto;
+    }
+
+    /* Ollama extras */
+    .ollama-model-field {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .ollama-model-select {
+      flex: 1;
+    }
+
+    .ollama-extras {
+      background: var(--surface-2);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+      margin-top: -8px;
+      border-top: 1px dashed var(--border);
+    }
+
+    .ollama-models-list {
+      margin-bottom: 12px;
+    }
+
+    .models-header {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+    }
+
+    .model-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 12px;
+      background: var(--bg);
+      border-radius: 6px;
+      margin-bottom: 6px;
+    }
+
+    .model-name {
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .model-info {
+      font-size: 12px;
+      color: var(--text-dim);
+      flex: 1;
+    }
+
+    .no-models {
+      color: var(--text-dim);
+      font-size: 13px;
+      font-style: italic;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .ollama-pull-section {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .ollama-pull-section input {
+      flex: 1;
+    }
+
+    .ollama-pull-status {
+      font-size: 13px;
+      min-height: 20px;
+      margin-bottom: 8px;
+    }
+
+    .ollama-pull-status .loading {
+      color: var(--yellow);
+    }
+
+    .ollama-pull-status .success {
+      color: var(--green);
+    }
+
+    .ollama-pull-status .error {
+      color: var(--accent);
+    }
+
+    .ollama-suggestions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .suggestion-label {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .btn-xs {
+      padding: 4px 8px;
+      font-size: 11px;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+    }
+
+    .btn-ghost:hover {
+      background: var(--border);
+      color: var(--text);
+    }
+
     /* Feedback */
     .feedback {
       padding: 12px 16px;
@@ -434,8 +565,8 @@
         { name: 'plex_base_url', label: 'Base URL', type: 'text' },
         { name: 'plex_token', label: 'Token', type: 'password' }
       ]},
-      { key: 'radarr', label: 'Radarr', fields: [
-        { name: 'radarr_base_url', label: 'Base URL', type: 'text' },
+      { key: 'radarr', label: 'Downloader', fields: [
+        { name: 'radarr_base_url', label: 'Service URL', type: 'text' },
         { name: 'radarr_api_key', label: 'API Key', type: 'password' }
       ]},
       { key: 'nzbgeek', label: 'NZBGeek', fields: [
@@ -449,11 +580,38 @@
       { key: 'usenet', label: 'Usenet/NZBHydra', fields: [
         { name: 'usenet_base_url', label: 'Base URL', type: 'text' },
         { name: 'usenet_api_key', label: 'API Key', type: 'password' }
+      ]},
+      { key: 'ollama', label: 'Ollama (AI)', fields: [
+        { name: 'ollama_base_url', label: 'Base URL', type: 'text' },
+        { name: 'ollama_model', label: 'Model', type: 'text' }
       ]}
     ];
 
     let currentSettings = {};
     let integrationStatus = {};
+    let integrationVerboseResults = {};
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value).replaceAll('`', '&#96;');
+    }
+
+    function getAuthHeaders(extra = {}) {
+      const headers = { ...extra };
+      const token = localStorage.getItem('majic_auth_token');
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+      return headers;
+    }
 
     function getUserId() {
       let id = localStorage.getItem('majic_user_id');
@@ -464,18 +622,105 @@
       return id;
     }
 
+    function collectIntegrationValues() {
+      const values = {};
+      INTEGRATIONS.forEach(int => {
+        int.fields.forEach(field => {
+          const el = document.getElementById(field.name);
+          values[field.name] = el ? String(el.value || '').trim() : '';
+        });
+      });
+      return values;
+    }
+
+    function integrationHasInput(int, values) {
+      return int.fields.some(field => String(values[field.name] || '').trim() !== '');
+    }
+
+    async function requestIntegrationTest(key, values) {
+      const res = await fetch('/api/integrations/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ integration: key, values })
+      });
+      const data = await res.json();
+      return {
+        ok: !!data.ok,
+        message: data.message || '',
+        details: data.details || null,
+        integration: data.integration || key,
+        statusCode: res.status
+      };
+    }
+
+    function maskFieldValue(fieldName, value) {
+      const text = String(value || '');
+      const lowered = fieldName.toLowerCase();
+      const sensitive = lowered.includes('key') || lowered.includes('token') || lowered.includes('password');
+      if (!sensitive) return text || '(empty)';
+      if (!text) return '(empty)';
+      if (text.length <= 6) return '*'.repeat(text.length);
+      return `${text.slice(0, 3)}***${text.slice(-2)}`;
+    }
+
+    function renderVerboseOutput(key, result) {
+      const row = document.querySelector(`.integration-row[data-integration-key="${key}"]`);
+      if (!row || !result) return;
+
+      let block = row.querySelector('.integration-verbose');
+      if (!block) {
+        block = document.createElement('pre');
+        block.className = 'integration-verbose';
+        row.appendChild(block);
+      }
+
+      const testedAt = result.testedAt || new Date().toISOString();
+      const payload = result.values || {};
+      const integration = INTEGRATIONS.find(item => item.key === key);
+      const fieldLines = (integration?.fields || [])
+        .map(field => `  - ${field.name}: ${maskFieldValue(field.name, payload[field.name])}`)
+        .join('\n');
+
+      const detailsText = result.details
+        ? `\nDetails:\n${JSON.stringify(result.details, null, 2)}`
+        : '';
+
+      block.textContent =
+`Test: ${result.integration || key}
+Time: ${testedAt}
+HTTP: ${result.statusCode || 'n/a'}
+Result: ${result.ok ? 'PASS' : 'FAIL'}
+Message: ${result.message || '(none)'}
+Input:
+${fieldLines || '  (no fields)'}${detailsText}`;
+    }
+
+    async function computeIntegrationStatus(values) {
+      const results = {};
+      for (const int of INTEGRATIONS) {
+        if (!integrationHasInput(int, values)) {
+          results[int.key] = null;
+          continue;
+        }
+        try {
+          const tested = await requestIntegrationTest(int.key, values);
+          results[int.key] = tested.ok;
+        } catch {
+          results[int.key] = false;
+        }
+      }
+      return results;
+    }
+
     async function loadSettings() {
       try {
-        const [settingsRes, statusRes] = await Promise.all([
-          fetch('/api/settings'),
-          fetch('/api/integrations')
-        ]);
+        const settingsRes = await fetch('/api/settings');
         const settingsData = await settingsRes.json();
-        const statusData = await statusRes.json();
 
         currentSettings = settingsData.values || {};
-        integrationStatus = statusData;
-
+        integrationStatus = {};
+        renderIntegrations();
+        integrationStatus = await computeIntegrationStatus(currentSettings);
         renderIntegrations();
       } catch (e) {
         console.error('Failed to load settings:', e);
@@ -485,14 +730,72 @@
     function renderIntegrations() {
       const container = document.getElementById('integration-list');
       container.innerHTML = INTEGRATIONS.map(int => {
-        const isActive = integrationStatus[int.key];
-        const statusClass = isActive ? 'success' : 'pending';
-        const statusText = isActive ? 'Connected' : 'Not configured';
+        const status = integrationStatus[int.key];
+        const hasInput = integrationHasInput(int, currentSettings);
+        const statusClass = status === true ? 'success' : status === false ? 'error' : 'pending';
+        const statusText = status === true
+          ? 'Connected'
+          : status === false
+            ? 'Test failed'
+            : hasInput
+              ? 'Needs test'
+              : 'Not configured';
+        const label = escapeHtml(int.label);
+
+        // Special handling for Ollama with model selector
+        if (int.key === 'ollama') {
+          const ollamaBaseUrl = escapeAttr(currentSettings['ollama_base_url'] || 'http://localhost:11434');
+          const ollamaModel = String(currentSettings['ollama_model'] || '');
+          const ollamaModelEscaped = escapeHtml(ollamaModel || 'Loading...');
+          const ollamaModelAttr = escapeAttr(ollamaModel);
+
+          return `
+            <div class="integration-row ollama-row" data-integration-key="${int.key}">
+              <div>
+                <div class="integration-name">${label}</div>
+                <span class="status-badge ${statusClass}">${statusText}</span>
+              </div>
+              <div class="integration-fields">
+                <div class="integration-field">
+                  <input type="text" class="form-input"
+                         id="ollama_base_url"
+                         placeholder="Base URL"
+                         value="${ollamaBaseUrl}">
+                </div>
+                <div class="integration-field ollama-model-field">
+                  <select id="ollama_model" class="form-input ollama-model-select">
+                    <option value="${ollamaModelAttr}">${ollamaModelEscaped}</option>
+                  </select>
+                  <button class="btn btn-secondary btn-sm" onclick="refreshOllamaModels()" title="Refresh models">↻</button>
+                </div>
+              </div>
+              <div class="integration-actions">
+                <button class="btn btn-secondary btn-sm" onclick="testIntegration('ollama')">Test</button>
+              </div>
+            </div>
+            <div class="ollama-extras">
+              <div class="ollama-models-list" id="ollama-models-list"></div>
+              <div class="ollama-pull-section">
+                <input type="text" id="ollama-pull-input" class="form-input" placeholder="Model name (e.g. llama3.2, mistral, phi3)">
+                <button class="btn btn-primary btn-sm" onclick="pullOllamaModel()">Pull Model</button>
+              </div>
+              <div id="ollama-pull-status" class="ollama-pull-status"></div>
+              <div class="ollama-suggestions">
+                <span class="suggestion-label">Popular:</span>
+                <button class="btn btn-ghost btn-xs" onclick="pullOllamaModel('llama3.2')">llama3.2</button>
+                <button class="btn btn-ghost btn-xs" onclick="pullOllamaModel('mistral')">mistral</button>
+                <button class="btn btn-ghost btn-xs" onclick="pullOllamaModel('phi3')">phi3</button>
+                <button class="btn btn-ghost btn-xs" onclick="pullOllamaModel('gemma2')">gemma2</button>
+                <button class="btn btn-ghost btn-xs" onclick="pullOllamaModel('qwen2.5')">qwen2.5</button>
+              </div>
+            </div>
+          `;
+        }
 
         return `
-          <div class="integration-row">
+          <div class="integration-row" data-integration-key="${int.key}">
             <div>
-              <div class="integration-name">${int.label}</div>
+              <div class="integration-name">${label}</div>
               <span class="status-badge ${statusClass}">${statusText}</span>
             </div>
             <div class="integration-fields">
@@ -500,8 +803,8 @@
                 <div class="integration-field">
                   <input type="${field.type}" class="form-input"
                          id="${field.name}"
-                         placeholder="${field.label}"
-                         value="${currentSettings[field.name] || ''}">
+                         placeholder="${escapeAttr(field.label)}"
+                         value="${escapeAttr(currentSettings[field.name] || '')}">
                 </div>
               `).join('')}
             </div>
@@ -511,25 +814,187 @@
           </div>
         `;
       }).join('');
+
+      // Load Ollama models after rendering
+      refreshOllamaModels();
+
+      Object.entries(integrationVerboseResults).forEach(([key, result]) => {
+        renderVerboseOutput(key, result);
+      });
     }
 
-    async function testIntegration(key) {
-      const values = {};
-      INTEGRATIONS.forEach(int => {
-        int.fields.forEach(field => {
-          const el = document.getElementById(field.name);
-          if (el) values[field.name] = el.value;
-        });
-      });
+    async function refreshOllamaModels() {
+      const select = document.getElementById('ollama_model');
+      const listEl = document.getElementById('ollama-models-list');
+      if (!select) return;
 
       try {
-        const res = await fetch('/api/integrations/test', {
+        const res = await fetch('/api/ollama/models');
+        const data = await res.json();
+
+        if (data.ok && data.models.length > 0) {
+          const currentModel = currentSettings['ollama_model'] || '';
+          select.innerHTML = '';
+
+          for (const model of data.models) {
+            const name = String(model.name || model.model || '').trim();
+            if (!name) continue;
+            const sizeBytes = Number(model.size || 0);
+            const size = Number.isFinite(sizeBytes) && sizeBytes > 0
+              ? `${(sizeBytes / 1e9).toFixed(1)}GB`
+              : 'n/a';
+
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = `${name} (${size})`;
+            option.selected = name === currentModel;
+            select.appendChild(option);
+          }
+
+          if (!select.options.length) {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = 'No models found';
+            select.appendChild(option);
+          }
+
+          if (listEl) {
+            listEl.innerHTML = '';
+            const header = document.createElement('div');
+            header.className = 'models-header';
+            header.textContent = 'Installed Models:';
+            listEl.appendChild(header);
+
+            for (const model of data.models) {
+              const name = String(model.name || model.model || '').trim();
+              if (!name) continue;
+              const sizeBytes = Number(model.size || 0);
+              const size = Number.isFinite(sizeBytes) && sizeBytes > 0
+                ? `${(sizeBytes / 1e9).toFixed(1)}GB`
+                : 'n/a';
+              const params = String(model.details?.parameter_size || '');
+
+              const row = document.createElement('div');
+              row.className = 'model-item';
+
+              const nameEl = document.createElement('span');
+              nameEl.className = 'model-name';
+              nameEl.textContent = name;
+
+              const infoEl = document.createElement('span');
+              infoEl.className = 'model-info';
+              infoEl.textContent = params ? `${params} · ${size}` : size;
+
+              const button = document.createElement('button');
+              button.className = 'btn btn-ghost btn-xs';
+              button.type = 'button';
+              button.textContent = 'Use';
+              button.addEventListener('click', () => selectOllamaModel(name));
+
+              row.appendChild(nameEl);
+              row.appendChild(infoEl);
+              row.appendChild(button);
+              listEl.appendChild(row);
+            }
+          }
+        } else {
+          select.innerHTML = '';
+          const option = document.createElement('option');
+          option.value = '';
+          option.textContent = 'No models found';
+          select.appendChild(option);
+          if (listEl) {
+            listEl.innerHTML = '';
+            const msg = document.createElement('div');
+            msg.className = 'no-models';
+            msg.textContent = 'No models installed. Pull one below.';
+            listEl.appendChild(msg);
+          }
+        }
+      } catch (e) {
+        select.innerHTML = '';
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'Error loading models';
+        select.appendChild(option);
+        if (listEl) {
+          listEl.innerHTML = '';
+          const msg = document.createElement('div');
+          msg.className = 'no-models';
+          msg.textContent = 'Could not connect to Ollama';
+          listEl.appendChild(msg);
+        }
+      }
+    }
+
+    function selectOllamaModel(modelName) {
+      const select = document.getElementById('ollama_model');
+      if (select) {
+        select.value = modelName;
+        // Trigger change to save
+        currentSettings['ollama_model'] = modelName;
+      }
+    }
+
+    async function pullOllamaModel(modelName) {
+      const input = document.getElementById('ollama-pull-input');
+      const statusEl = document.getElementById('ollama-pull-status');
+      const model = modelName || (input ? input.value.trim() : '');
+      const setStatus = (level, message) => {
+        if (!statusEl) return;
+        statusEl.innerHTML = '';
+        const span = document.createElement('span');
+        span.className = level;
+        span.textContent = message;
+        statusEl.appendChild(span);
+      };
+
+      if (!model) {
+        setStatus('error', 'Enter a model name');
+        return;
+      }
+
+      setStatus('loading', `Pulling ${model}... (this may take a while)`);
+
+      try {
+        const res = await fetch('/api/ollama/pull', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ integration: key, values })
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ model })
         });
         const data = await res.json();
 
+        if (res.status === 401 || res.status === 403) {
+          setStatus('error', 'Admin login required to pull models');
+          return;
+        }
+
+        if (data.ok) {
+          setStatus('success', data.message || `Pulled ${model}`);
+          if (input) input.value = '';
+          refreshOllamaModels();
+        } else {
+          setStatus('error', data.message || 'Pull failed');
+        }
+      } catch (e) {
+        setStatus('error', `Pull failed: ${e.message}`);
+      }
+    }
+
+    async function testIntegration(key) {
+      const values = collectIntegrationValues();
+
+      try {
+        const data = await requestIntegrationTest(key, values);
+        currentSettings = values;
+        integrationStatus[key] = data.ok;
+        integrationVerboseResults[key] = {
+          ...data,
+          values,
+          testedAt: new Date().toISOString()
+        };
+        renderIntegrations();
+        renderVerboseOutput(key, integrationVerboseResults[key]);
         showFeedback('settings-feedback', data.ok ? data.message : `Error: ${data.message}`, data.ok);
       } catch (e) {
         showFeedback('settings-feedback', 'Test failed: ' + e.message, false);
@@ -537,55 +1002,43 @@
     }
 
     async function saveSettings() {
-      const values = {};
-      INTEGRATIONS.forEach(int => {
-        int.fields.forEach(field => {
-          const el = document.getElementById(field.name);
-          if (el) values[field.name] = el.value;
-        });
-      });
+      const values = collectIntegrationValues();
+      currentSettings = values;
+      renderIntegrations();
 
       try {
+        showFeedback('settings-feedback', 'Testing integrations before save...', true);
+        const testResults = await computeIntegrationStatus(values);
+
+        // Persist only integrations that actually passed test.
+        const savePayload = {};
+        INTEGRATIONS.forEach(int => {
+          const keep = testResults[int.key] === true;
+          int.fields.forEach(field => {
+            savePayload[field.name] = keep ? String(values[field.name] || '').trim() : '';
+          });
+        });
+
         const res = await fetch('/api/settings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(values)
+          body: JSON.stringify(savePayload)
         });
         const data = await res.json();
 
         if (data.status === 'ok') {
           currentSettings = data.values;
-          showFeedback('settings-feedback', 'Settings saved. Testing connections...', true);
-
-          // Test each configured integration to get real status
-          const testResults = {};
-          for (const int of INTEGRATIONS) {
-            const hasValue = int.fields.some(f => values[f.name] && values[f.name].trim());
-            if (!hasValue) {
-              testResults[int.key] = false;
-              continue;
-            }
-            try {
-              const testRes = await fetch('/api/integrations/test', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ integration: int.key, values })
-              });
-              const testData = await testRes.json();
-              testResults[int.key] = testData.ok;
-              if (!testData.ok) {
-                showFeedback('settings-feedback', `${int.label}: ${testData.message || 'Failed'}`, false);
-              }
-            } catch {
-              testResults[int.key] = false;
-            }
-          }
           integrationStatus = testResults;
           renderIntegrations();
 
-          const passed = Object.values(testResults).filter(Boolean).length;
-          const total = Object.values(testResults).length;
-          showFeedback('settings-feedback', `Saved. ${passed}/${total} integrations verified.`, passed > 0);
+          const tested = Object.values(testResults).filter(v => v !== null).length;
+          const kept = Object.values(testResults).filter(v => v === true).length;
+          const removed = tested - kept;
+          showFeedback(
+            'settings-feedback',
+            `Saved. Kept ${kept}/${tested} tested integrations${removed > 0 ? ` (${removed} removed)` : ''}.`,
+            kept > 0 || tested === 0
+          );
         } else {
           showFeedback('settings-feedback', 'Failed to save settings', false);
         }

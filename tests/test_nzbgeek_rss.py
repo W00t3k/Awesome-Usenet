@@ -3,6 +3,7 @@ import pytest
 from app.agents.usenet_agent import UsenetAgent
 from app.clients.usenet_client import UsenetClient
 from app.models import AgentContext
+from app.services.usenet_parser import is_likely_tv_release, parse_release
 
 
 def _context() -> AgentContext:
@@ -46,6 +47,31 @@ async def test_usenet_client_avoids_double_api_suffix() -> None:
 
 
 @pytest.mark.asyncio
+async def test_usenet_client_supports_querystring_base_url() -> None:
+    client = UsenetClient(
+        base_url="https://drunkenslug.com/api?t=search&q=test&apikey=from-url",
+        api_key="",
+        timeout_seconds=0.1,
+    )
+    seen: dict[str, object] = {}
+
+    async def fake_get_json(url: str, params: dict | None = None, headers: dict | None = None) -> dict:
+        seen["url"] = url
+        seen["params"] = params or {}
+        return {"channel": {"item": []}}
+
+    client._http.get_json = fake_get_json  # type: ignore[method-assign]
+    await client.movie_search(query="")
+
+    assert seen["url"] == "https://drunkenslug.com/api"
+    params = seen["params"]
+    assert isinstance(params, dict)
+    assert params.get("q") == "test"
+    assert params.get("apikey") == "from-url"
+    assert params.get("t") == "search"
+
+
+@pytest.mark.asyncio
 async def test_nzbgeek_agent_collects_movie_candidates() -> None:
     agent = UsenetAgent(
         rss_url="https://api.nzbgeek.info/rss?t=search&cat=2000&apikey={API_KEY}",
@@ -70,3 +96,40 @@ async def test_nzbgeek_agent_collects_movie_candidates() -> None:
     assert payload.movies[0].title == "The Matrix"
     assert payload.movies[0].year == 1999
     assert "nzbgeek-rss" in payload.movies[0].source_tags
+
+
+@pytest.mark.asyncio
+async def test_nzbgeek_agent_skips_tv_episode_releases() -> None:
+    agent = UsenetAgent(
+        rss_url="https://api.nzbgeek.info/rss?t=search&cat=2000&apikey={API_KEY}",
+        api_key="test-key",
+        timeout_seconds=0.1,
+    )
+
+    async def fake_feed(_rss_url: str, api_key: str | None = None) -> list[dict]:
+        assert api_key == "test-key"
+        return [
+            {
+                "title": "The.Huckleberry.Hound.Show.S01E04.FLAC2.0.HDTV",
+                "description": "TV episode leak in movie feed",
+                "pub_date": "Fri, 13 Feb 2026 11:00:00 +0000",
+            },
+            {
+                "title": "Alien.Romulus.2025.1080p.BluRay.x265",
+                "description": "Movie release",
+                "pub_date": "Fri, 13 Feb 2026 11:05:00 +0000",
+            },
+        ]
+
+    agent._client.movie_rss_feed = fake_feed  # type: ignore[method-assign]
+
+    payload = await agent.collect(_context())
+    assert len(payload.movies) == 1
+    assert payload.movies[0].title == "Alien Romulus"
+
+
+def test_parse_release_marks_tv_patterns() -> None:
+    assert is_likely_tv_release("The.Huckleberry.Hound.Show.S01E04.FLAC2.0.HDTV")
+    assert is_likely_tv_release("The.One.Show.S2026E30.HDTV")
+    parsed = parse_release("The.Huckleberry.Hound.Show.S01E04.FLAC2.0.HDTV")
+    assert parsed.is_tv_release is True

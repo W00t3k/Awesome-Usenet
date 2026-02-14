@@ -5,7 +5,7 @@
     "release_date": "2025-01-17",
     "url": "https://www.rogerebert.com/reviews/the-brutalist-movie-review-2025",
     "rating": 3.5,
-    "image": "https://example.com/the-brutalist.jpg"
+    "image": null
   },
   {
     "title": "Mickey 17",
@@ -13,7 +13,7 @@
     "release_date": "2025-03-07",
     "url": "https://www.rogerebert.com/reviews/mickey-17-movie-review-2025",
     "rating": 3.0,
-    "image": "https://example.com/mickey-17.jpg"
+    "image": null
   },
   {
     "title": "Dune: Messiah",
@@ -21,7 +21,7 @@
     "release_date": "2026-12-18",
     "url": "https://www.rogerebert.com/reviews/dune-messiah-movie-review-2026",
     "rating": 3.5,
-    "image": "https://example.com/dune-messiah.jpg"
+    "image": null
   },
   {
     "title": "Supergirl: Woman of Tomorrow",
@@ -29,6 +29,6 @@
     "release_date": "2026-06-26",
     "url": "https://www.rogerebert.com/reviews/supergirl-woman-of-tomorrow-movie-review-2026",
     "rating": 2.5,
-    "image": "https://example.com/supergirl.jpg"
+    "image": null
   }
 ]
