@@ -70,6 +70,30 @@ Settings and integration tests are managed from the web app at `/integrations`.
 ### Plex notes
 Use a Plex token from your server account and set `PLEX_BASE_URL`, for example `http://192.168.1.20:32400`.
 
+#### Plex TV Station (playlist channel on TV clients)
+- `POST /api/plex/channel/refresh` builds or refreshes a Plex playlist channel (default `Majic TV Station`) with a random queue from your Plex movie library.
+- `POST /api/plex/channel/schedule` configures daily run times (`HH:MM`, 24-hour) so the playlist rotates automatically.
+- `GET /api/plex/channel/status` shows current schedule, last run status, playback status, and current playlist metadata.
+- `GET /api/plex/clients` lists Plex clients discovered from your server (use this to see playback targets).
+- Autoplay support: each refresh can start a random movie on a Plex client, including a random in-movie offset for a TV-channel feel.
+
+Example schedule payload:
+
+```json
+{
+  "enabled": true,
+  "playlist_name": "Majic TV Station",
+  "count": 30,
+  "min_year": 1990,
+  "max_year": 2026,
+  "schedule_times": ["18:00", "21:30"],
+  "autoplay_enabled": true,
+  "autoplay_client": "Sony Bravia",
+  "autoplay_random_offset": true,
+  "run_now": true
+}
+```
+
 ### Radarr notes
 Set `RADARR_BASE_URL`, then add your API key from `Settings -> General -> Security`.
 

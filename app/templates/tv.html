@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ app_title }} - TV Station</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Outfit:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="bg-grain"></div>
+    <main class="shell">
+      <header class="topbar panel">
+        <div class="brand">
+          <a href="/" class="nav-brand" style="margin-bottom: 12px;">
+            <span class="brand-icon">📺</span>
+            <span class="brand-text">Majic TV</span>
+          </a>
+          <p class="kicker">Plex Channel</p>
+          <h1>TV Station</h1>
+          <p class="subtext">Create a random movie channel from your Plex library.</p>
+        </div>
+        <div class="controls">
+          <a class="nav-link" href="/">Recommendations</a>
+          <a class="nav-link" href="/usenet">Usenet</a>
+          <a class="nav-link" href="/integrations">Integrations</a>
+        </div>
+      </header>
+
+      <section class="panel usenet-panel">
+        <div class="panel-head">
+          <h2>Station Controls</h2>
+          <span id="tv-meta" class="muted"></span>
+        </div>
+
+        <div class="usenet-controls">
+          <label>
+            Station Name
+            <input id="tv-name" type="text" value="Random Plex TV" placeholder="Random Plex TV" />
+          </label>
+          <label>
+            Queue Size
+            <input id="tv-count" type="number" min="1" max="250" value="30" />
+          </label>
+          <label>
+            Min Year
+            <input id="tv-min-year" type="number" min="1900" max="2099" placeholder="Any" />
+          </label>
+          <label>
+            Max Year
+            <input id="tv-max-year" type="number" min="1900" max="2099" placeholder="Any" />
+          </label>
+        </div>
+
+        <div class="header-actions" style="margin-bottom: 14px;">
+          <button id="tv-start" class="btn btn-primary">Start Station</button>
+          <button id="tv-next" class="btn btn-ghost" disabled>Next Movie</button>
+          <button id="tv-stop" class="btn btn-danger" disabled>Stop Station</button>
+          <button id="tv-refresh" class="btn btn-ghost" disabled>Refresh</button>
+        </div>
+
+        <p id="tv-error" class="muted"></p>
+      </section>
+
+      <section class="panel usenet-panel">
+        <div class="panel-head">
+          <h2>Now Playing</h2>
+        </div>
+        <div id="tv-now-playing" class="movie-grid movie-grid-small"></div>
+      </section>
+
+      <section class="panel usenet-panel">
+        <div class="panel-head">
+          <h2>Up Next</h2>
+        </div>
+        <div id="tv-up-next" class="movie-grid movie-grid-small"></div>
+      </section>
+    </main>
+
+    <script src="/static/tv.js?v=20260215a" defer></script>
+  </body>
+</html>

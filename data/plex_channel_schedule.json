@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "playlist_name": "Majic TV Station",
+  "count": 25,
+  "min_year": null,
+  "max_year": null,
+  "schedule_times": [
+    "20:00"
+  ],
+  "interval_minutes": 10,
+  "last_run_at": "2026-02-15T13:54:02.824703-05:00",
+  "last_run_source": "interval",
+  "last_run_status": "ok",
+  "last_run_message": "Updated 'Majic TV Station' with 15 movies.",
+  "last_queue_size": 15,
+  "last_run_slots": {}
+}
