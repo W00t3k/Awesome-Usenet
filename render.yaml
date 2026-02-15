@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: majic-movie-selector
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: APP_TITLE
+        value: "Majic Movie Selector"
+      - key: TMDB_API_KEY
+        sync: false
+      - key: RADARR_BASE_URL
+        sync: false
+      - key: RADARR_API_KEY
+        sync: false
+      - key: PLEX_BASE_URL
+        sync: false
+      - key: PLEX_TOKEN
+        sync: false
+      - key: NZBGEEK_RSS_URL
+        sync: false
+      - key: NZBGEEK_API_KEY
+        sync: false
+      - key: DRUNKENSLUG_BASE_URL
+        sync: false
+      - key: DRUNKENSLUG_API_KEY
+        sync: false
+      - key: OLLAMA_BASE_URL
+        sync: false
+      - key: OLLAMA_MODEL
+        sync: false
+    healthCheckPath: /api/integrations
