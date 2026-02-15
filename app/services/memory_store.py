@@ -86,8 +86,9 @@ class MemoryStore:
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT UNIQUE NOT NULL,
-                    email TEXT UNIQUE,
+                    email TEXT,
                     password_hash TEXT NOT NULL,
+                    google_id TEXT,
                     is_active INTEGER DEFAULT 1,
                     is_admin INTEGER DEFAULT 0,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -100,6 +101,22 @@ class MemoryStore:
                 ON users(username)
                 """
             )
+            # Per-user encrypted credentials
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS user_credentials (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    credential_key TEXT NOT NULL,
+                    encrypted_value TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id),
+                    UNIQUE(user_id, credential_key)
+                )
+                """
+            )
+
             # Sync jobs tracking
             conn.execute(
                 """
@@ -131,6 +148,21 @@ class MemoryStore:
                 )
                 """
             )
+
+            # Run migrations for existing databases
+            self._run_migrations(conn)
+
+    def _run_migrations(self, conn: sqlite3.Connection) -> None:
+        """Run database migrations for schema updates."""
+        # Migration: Add google_id column to users table
+        cursor = conn.execute("PRAGMA table_info(users)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "google_id" not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN google_id TEXT")
+
+        # Create indexes that may not exist
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
 
     async def add_feedback(self, payload: FeedbackInput) -> None:
         text = self._compose_embedding_text(payload.title, payload.overview, payload.genres)
@@ -380,16 +412,17 @@ class MemoryStore:
         username: str,
         password_hash: str,
         email: str | None = None,
+        google_id: str | None = None,
         is_admin: bool = False,
     ) -> int | None:
         try:
             with self._connect() as conn:
                 cursor = conn.execute(
                     """
-                    INSERT INTO users (username, email, password_hash, is_admin)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO users (username, email, password_hash, google_id, is_admin)
+                    VALUES (?, ?, ?, ?, ?)
                     """,
-                    (username, email, password_hash, int(is_admin)),
+                    (username, email, password_hash, google_id, int(is_admin)),
                 )
                 return cursor.lastrowid
         except Exception:
@@ -399,7 +432,7 @@ class MemoryStore:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT id, username, email, password_hash, is_active, is_admin, created_at
+                SELECT id, username, email, password_hash, google_id, is_active, is_admin, created_at
                 FROM users WHERE username = ?
                 """,
                 (username,),
@@ -411,6 +444,7 @@ class MemoryStore:
             "username": row["username"],
             "email": row["email"],
             "password_hash": row["password_hash"],
+            "google_id": row["google_id"],
             "is_active": bool(row["is_active"]),
             "is_admin": bool(row["is_admin"]),
             "created_at": row["created_at"],
@@ -420,7 +454,7 @@ class MemoryStore:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT id, username, email, password_hash, is_active, is_admin, created_at
+                SELECT id, username, email, password_hash, google_id, is_active, is_admin, created_at
                 FROM users WHERE id = ?
                 """,
                 (user_id,),
@@ -432,10 +466,66 @@ class MemoryStore:
             "username": row["username"],
             "email": row["email"],
             "password_hash": row["password_hash"],
+            "google_id": row["google_id"],
             "is_active": bool(row["is_active"]),
             "is_admin": bool(row["is_admin"]),
             "created_at": row["created_at"],
         }
+
+    def get_user_by_google_id(self, google_id: str) -> dict | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, username, email, password_hash, google_id, is_active, is_admin, created_at
+                FROM users WHERE google_id = ?
+                """,
+                (google_id,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "id": row["id"],
+            "username": row["username"],
+            "email": row["email"],
+            "password_hash": row["password_hash"],
+            "google_id": row["google_id"],
+            "is_active": bool(row["is_active"]),
+            "is_admin": bool(row["is_admin"]),
+            "created_at": row["created_at"],
+        }
+
+    def get_user_by_email(self, email: str) -> dict | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, username, email, password_hash, google_id, is_active, is_admin, created_at
+                FROM users WHERE email = ?
+                """,
+                (email,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "id": row["id"],
+            "username": row["username"],
+            "email": row["email"],
+            "password_hash": row["password_hash"],
+            "google_id": row["google_id"],
+            "is_active": bool(row["is_active"]),
+            "is_admin": bool(row["is_admin"]),
+            "created_at": row["created_at"],
+        }
+
+    def update_user_google_id(self, user_id: int, google_id: str) -> bool:
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    "UPDATE users SET google_id = ? WHERE id = ?",
+                    (google_id, user_id),
+                )
+            return True
+        except Exception:
+            return False
 
     def list_users(self, limit: int = 100) -> list[dict]:
         with self._connect() as conn:
@@ -580,3 +670,63 @@ class MemoryStore:
                 """,
                 (catalog_type, json.dumps(data)),
             )
+
+    # ===== User credentials methods (encrypted API keys) =====
+    def set_user_credential(
+        self,
+        user_id: int,
+        credential_key: str,
+        encrypted_value: str,
+    ) -> bool:
+        """Store an encrypted credential for a user."""
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO user_credentials (user_id, credential_key, encrypted_value)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(user_id, credential_key) DO UPDATE SET
+                        encrypted_value = excluded.encrypted_value,
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (user_id, credential_key, encrypted_value),
+                )
+            return True
+        except Exception:
+            return False
+
+    def get_user_credential(self, user_id: int, credential_key: str) -> str | None:
+        """Get an encrypted credential for a user."""
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT encrypted_value FROM user_credentials
+                WHERE user_id = ? AND credential_key = ?
+                """,
+                (user_id, credential_key),
+            ).fetchone()
+        return row["encrypted_value"] if row else None
+
+    def get_user_credentials(self, user_id: int) -> dict[str, str]:
+        """Get all encrypted credentials for a user."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT credential_key, encrypted_value FROM user_credentials
+                WHERE user_id = ?
+                """,
+                (user_id,),
+            ).fetchall()
+        return {row["credential_key"]: row["encrypted_value"] for row in rows}
+
+    def delete_user_credential(self, user_id: int, credential_key: str) -> bool:
+        """Delete a credential for a user."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                DELETE FROM user_credentials
+                WHERE user_id = ? AND credential_key = ?
+                """,
+                (user_id, credential_key),
+            )
+        return cursor.rowcount > 0

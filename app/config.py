@@ -57,6 +57,14 @@ class Settings(BaseSettings):
     # Authentication
     jwt_secret: str | None = Field(default=None, alias="JWT_SECRET")
 
+    # Google OAuth
+    google_client_id: str | None = Field(default=None, alias="GOOGLE_CLIENT_ID")
+    google_client_secret: str | None = Field(default=None, alias="GOOGLE_CLIENT_SECRET")
+    google_redirect_uri: str = Field(
+        default="http://127.0.0.1:8080/api/auth/google/callback",
+        alias="GOOGLE_REDIRECT_URI",
+    )
+
     # Background jobs (Redis/RQ)
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
 

@@ -80,6 +80,8 @@ DEFAULT_URLS: dict[str, str] = {
 REQUIRED_URL_FIELDS = {"plex_base_url", "radarr_base_url", "drunkenslug_base_url", "usenet_base_url", "ollama_base_url"}
 
 ENV_KEY_MAP: dict[str, str] = {
+    "google_client_id": "GOOGLE_CLIENT_ID",
+    "google_client_secret": "GOOGLE_CLIENT_SECRET",
     "tmdb_api_key": "TMDB_API_KEY",
     "rottentomatoes_list_url": "ROTTENTOMATOES_LIST_URL",
     "releases_url": "RELEASES_URL",
@@ -728,6 +730,7 @@ async def _crawl_usenet_releases(limit: int, query: str | None = None) -> dict:
     _rss_has_placeholder = "{API_KEY}" in _rss_url or "${API_KEY}" in _rss_url
     if _rss_url and (not _rss_has_placeholder or settings.nzbgeek_api_key):
         try:
+            logger.info(f"Fetching NZBGeek RSS from: {_rss_url[:50]}...")
             rows = await UsenetClient(
                 base_url="https://api.nzbgeek.info",
                 api_key=settings.nzbgeek_api_key or "",
@@ -736,6 +739,7 @@ async def _crawl_usenet_releases(limit: int, query: str | None = None) -> dict:
                 rss_url=settings.nzbgeek_rss_url,
                 api_key=settings.nzbgeek_api_key,
             )
+            logger.info(f"NZBGeek returned {len(rows)} rows")
             for row in rows:
                 raw_title = str(row.get("title") or "").strip()
                 if not raw_title:
@@ -748,6 +752,7 @@ async def _crawl_usenet_releases(limit: int, query: str | None = None) -> dict:
                     details=row.get("description"),
                 )
         except Exception as exc:  # noqa: BLE001
+            logger.warning(f"NZBGeek error: {exc}")
             errors.append(f"NZBGeek: {exc}")
 
     if settings.drunkenslug_api_key:
@@ -1296,6 +1301,108 @@ async def get_usenet_releases(
     return await _crawl_usenet_releases(limit=limit, query=q)
 
 
+async def _fetch_nzbgeek_movies(limit: int = 100) -> list[dict]:
+    """Fetch new movie releases from NZBGeek using the dedicated new_movies RSS feed."""
+    # Get API key from settings - try to extract from RSS URL if not set directly
+    api_key = settings.nzbgeek_api_key or ""
+    if not api_key and settings.nzbgeek_rss_url:
+        # Try to extract apikey or r= param from URL
+        match = re.search(r'(?:apikey|r)=([^&]+)', settings.nzbgeek_rss_url)
+        if match:
+            api_key = match.group(1)
+
+    if not api_key:
+        return []
+
+    # Use NZBGeek's dedicated new_movies RSS feed - this is the same as geekseek.php?new_movies
+    movies_url = f"https://api.nzbgeek.info/rss?t=new_movies&limit={limit}&r={api_key}"
+
+    try:
+        client = UsenetClient(
+            base_url="https://api.nzbgeek.info",
+            api_key=api_key,
+            timeout_seconds=settings.source_timeout_seconds,
+        )
+        rows = await client.movie_rss_feed(rss_url=movies_url, api_key=api_key)
+        return rows
+    except Exception as exc:
+        logger.warning(f"Failed to fetch NZBGeek movies: {exc}")
+        return []
+
+
+@app.get("/api/usenet/latest")
+async def get_usenet_latest(
+    limit: int = Query(default=12, ge=1, le=50),
+) -> dict:
+    """Get the latest new movie releases from NZBGeek's new_movies feed."""
+    try:
+        # Fetch from NZBGeek's dedicated new_movies RSS feed
+        raw_movies = await _fetch_nzbgeek_movies(limit=limit * 3)
+
+        if not raw_movies:
+            # Fallback to crawl if direct fetch fails
+            data = await _crawl_usenet_releases(limit=limit * 2, query=None)
+            raw_movies = data.get("items", [])
+
+        # Create poster client for enrichment
+        _poster_client = None
+        if settings.tmdb_api_key:
+            _poster_client = PosterLookupClient(
+                timeout_seconds=settings.source_timeout_seconds,
+                tmdb_api_key=settings.tmdb_api_key,
+            )
+
+        # Enrich with posters from TMDB
+        enriched = []
+        seen_titles = set()
+        for r in raw_movies:
+            raw_title = r.get("title", "")
+            if not raw_title:
+                continue
+
+            # Parse title and year from release name
+            title, year = _extract_release_title_year(raw_title)
+
+            # Dedupe by title
+            title_key = title.lower()
+            if title_key in seen_titles:
+                continue
+            seen_titles.add(title_key)
+
+            poster_url = None
+            overview = ""
+
+            # Try to get poster from TMDB
+            if _poster_client and title:
+                try:
+                    info = await _poster_client.lookup(title, year)
+                    if info:
+                        poster_url = info.get("poster_url")
+                        overview = info.get("overview", "")
+                except Exception:
+                    pass
+
+            enriched.append({
+                "title": title,
+                "year": year,
+                "poster_url": poster_url,
+                "overview": overview,
+                "quality": "",
+                "size": "",
+                "source": "nzbgeek",
+                "pub_date": r.get("pub_date", ""),
+                "release_name": raw_title,
+            })
+
+            if len(enriched) >= limit:
+                break
+
+        return {"ok": True, "releases": enriched, "count": len(enriched)}
+    except Exception as exc:
+        logger.warning(f"Failed to get latest usenet: {exc}")
+        return {"ok": False, "releases": [], "error": str(exc)}
+
+
 @app.get("/api/trailer")
 async def get_trailer(title: str = Query(...), year: int | None = Query(default=None)) -> dict:
     if not settings.tmdb_api_key:
@@ -1437,6 +1544,101 @@ async def get_download_health() -> dict:
             "download_rate_human": None,
             "items": [],
         }
+
+
+@app.get("/api/disk-space")
+async def get_disk_space() -> dict:
+    """Get disk space info from Radarr or local system."""
+    disks = []
+    seen_sizes = set()
+
+    # Try to get disk space from Radarr first (shows where movies are stored)
+    if settings.radarr_api_key:
+        try:
+            client = RadarrClient(
+                base_url=settings.radarr_base_url,
+                api_key=settings.radarr_api_key,
+                timeout_seconds=settings.source_timeout_seconds,
+            )
+            radarr_disks = await client.disk_space()
+            for d in radarr_disks:
+                free_bytes = d.get("freeSpace", 0)
+                total_bytes = d.get("totalSpace", 0)
+
+                # Skip empty or system volumes
+                if total_bytes == 0:
+                    continue
+                path = d.get("path", "")
+                # Skip macOS system paths
+                if any(skip in path for skip in [
+                    "/System/Volumes",
+                    "/private/var",
+                    "/AppTranslocation",
+                    "/tmp",
+                    "/var/folders",
+                ]):
+                    continue
+
+                # Dedupe by total size (same physical disk)
+                size_key = total_bytes
+                if size_key in seen_sizes:
+                    continue
+                seen_sizes.add(size_key)
+
+                used_bytes = total_bytes - free_bytes
+                percent_used = (used_bytes / total_bytes * 100) if total_bytes > 0 else 0
+
+                # Clean up label
+                label = d.get("label", "") or path
+                if label == "/" or not label:
+                    label = "Movies Drive"
+
+                disks.append({
+                    "path": path,
+                    "label": label,
+                    "free_bytes": free_bytes,
+                    "total_bytes": total_bytes,
+                    "used_bytes": used_bytes,
+                    "percent_used": round(percent_used, 1),
+                    "free_human": _human_size(free_bytes),
+                    "total_human": _human_size(total_bytes),
+                    "used_human": _human_size(used_bytes),
+                    "source": "radarr",
+                })
+        except Exception as exc:
+            logger.warning(f"Failed to get Radarr disk space: {exc}")
+
+    # Fallback to local disk space if no Radarr data
+    if not disks:
+        import shutil
+        try:
+            usage = shutil.disk_usage("/")
+            percent_used = (usage.used / usage.total * 100) if usage.total > 0 else 0
+            disks.append({
+                "path": "/",
+                "label": "System Drive",
+                "free_bytes": usage.free,
+                "total_bytes": usage.total,
+                "used_bytes": usage.used,
+                "percent_used": round(percent_used, 1),
+                "free_human": _human_size(usage.free),
+                "total_human": _human_size(usage.total),
+                "used_human": _human_size(usage.used),
+                "source": "local",
+            })
+        except Exception:
+            pass
+
+    return {"ok": True, "disks": disks}
+
+
+def _human_size(bytes_val: int) -> str:
+    """Convert bytes to human readable string."""
+    for unit in ["B", "KB", "MB", "GB", "TB"]:
+        if abs(bytes_val) < 1024:
+            return f"{bytes_val:.1f} {unit}"
+        bytes_val /= 1024
+    return f"{bytes_val:.1f} PB"
 
 
 @app.get("/api/download-history")
@@ -1970,6 +2172,22 @@ async def test_integration(payload: IntegrationTestRequest) -> dict:
     )
 
     try:
+        if integration == "google":
+            client_id = values.get("google_client_id", "")
+            client_secret = values.get("google_client_secret", "")
+            if not client_id or not client_secret:
+                return {"ok": False, "integration": integration, "message": "Client ID and Secret required"}
+            # Validate format
+            if not client_id.endswith(".apps.googleusercontent.com"):
+                return {"ok": False, "integration": integration, "message": "Invalid Client ID format"}
+            if not client_secret.startswith("GOCSPX-"):
+                return {"ok": False, "integration": integration, "message": "Invalid Client Secret format"}
+            return {
+                "ok": True,
+                "integration": integration,
+                "message": "Google OAuth credentials valid. Save to enable Sign in with Google.",
+            }
+
         if integration == "tmdb":
             if not values["tmdb_api_key"]:
                 return {"ok": False, "integration": integration, "message": "TMDB_API_KEY missing"}

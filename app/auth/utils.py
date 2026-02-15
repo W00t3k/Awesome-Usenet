@@ -12,6 +12,10 @@ import secrets
 import time
 from typing import Any
 
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -170,4 +174,62 @@ def verify_jwt(token: str) -> dict[str, Any] | None:
         return payload
 
     except (ValueError, TypeError, json.JSONDecodeError, KeyError):
+        return None
+
+
+# ============================================================================
+# Credential Encryption (for per-user API keys)
+# ============================================================================
+
+_ENCRYPTION_SALT = b"majic-movie-selector-v1"  # Fixed salt for key derivation
+
+
+def _derive_encryption_key(user_secret: str) -> bytes:
+    """Derive a Fernet key from user's secret (password or unique ID)."""
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=_ENCRYPTION_SALT,
+        iterations=100_000,
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(user_secret.encode()))
+    return key
+
+
+def encrypt_credential(plaintext: str, user_secret: str) -> str:
+    """Encrypt a credential (API key) for secure storage.
+
+    Args:
+        plaintext: The API key or secret to encrypt
+        user_secret: User's password or unique identifier for key derivation
+
+    Returns:
+        Base64-encoded encrypted string
+    """
+    if not plaintext:
+        return ""
+    key = _derive_encryption_key(user_secret)
+    f = Fernet(key)
+    encrypted = f.encrypt(plaintext.encode())
+    return base64.urlsafe_b64encode(encrypted).decode()
+
+
+def decrypt_credential(ciphertext: str, user_secret: str) -> str | None:
+    """Decrypt a stored credential.
+
+    Args:
+        ciphertext: Base64-encoded encrypted credential
+        user_secret: User's password or unique identifier
+
+    Returns:
+        Decrypted plaintext or None if decryption fails
+    """
+    if not ciphertext:
+        return None
+    try:
+        key = _derive_encryption_key(user_secret)
+        f = Fernet(key)
+        encrypted = base64.urlsafe_b64decode(ciphertext)
+        return f.decrypt(encrypted).decode()
+    except Exception:
         return None

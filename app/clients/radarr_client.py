@@ -75,6 +75,13 @@ class RadarrClient:
             headers={"X-Api-Key": self._api_key},
         )
 
+    async def disk_space(self) -> list[dict]:
+        """Get disk space info from Radarr."""
+        return await self._http.get_json(
+            f"{self._base_url}/api/v3/diskspace",
+            headers={"X-Api-Key": self._api_key},
+        )
+
     async def add_movie(
         self,
         lookup_result: dict[str, Any],

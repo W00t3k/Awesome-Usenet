@@ -557,6 +557,10 @@
 
   <script>
     const INTEGRATIONS = [
+      { key: 'google', label: 'Google Sign-In', fields: [
+        { name: 'google_client_id', label: 'Client ID', type: 'text' },
+        { name: 'google_client_secret', label: 'Client Secret', type: 'password' }
+      ]},
       { key: 'tmdb', label: 'TMDB', fields: [{ name: 'tmdb_api_key', label: 'API Key', type: 'password' }] },
       { key: 'rottentomatoes', label: 'Rotten Tomatoes', fields: [{ name: 'rottentomatoes_list_url', label: 'List URL', type: 'text' }] },
       { key: 'rogerebert', label: 'RogerEbert', fields: [{ name: 'rogerebert_reviews_url', label: 'Reviews URL', type: 'text' }] },

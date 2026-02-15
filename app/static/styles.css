@@ -1612,6 +1612,173 @@ label {
   transform: scale(1.1);
 }
 
+/* Login Modal */
+.modal-sm .modal-dialog {
+  max-width: 400px;
+}
+
+.login-modal-body {
+  padding: 32px;
+  text-align: center;
+}
+
+.login-modal-body h2 {
+  margin-bottom: 8px;
+  font-size: 1.5rem;
+}
+
+.login-modal-body .meta {
+  margin-bottom: 24px;
+  color: var(--text-muted);
+}
+
+.login-section {
+  margin-bottom: 20px;
+}
+
+.btn-google {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 24px;
+  background: #fff;
+  color: #333;
+  border: none;
+  border-radius: 24px;
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.btn-google:hover {
+  background: #f8f8f8;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  transform: translateY(-1px);
+}
+
+.btn-google svg {
+  flex-shrink: 0;
+}
+
+/* Google not configured message */
+#google-not-configured {
+  padding: 20px;
+  background: var(--bg);
+  border-radius: 8px;
+  text-align: center;
+}
+
+#google-not-configured .meta {
+  margin: 8px 0;
+  font-size: 13px;
+}
+
+/* User Menu */
+.user-menu {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 12px;
+}
+
+.user-avatar-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: all 0.2s;
+}
+
+.user-avatar-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--bg-hover);
+}
+
+.user-dropdown {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-name {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.user-dropdown.hidden,
+#login-btn.hidden {
+  display: none;
+}
+
+#google-login-section.hidden {
+  display: none;
+}
+
+/* Just Added Section */
+.just-added-section {
+  margin-bottom: 20px;
+}
+
+.just-added-section .card-header h2 {
+  font-size: 1.25rem;
+}
+
+.movie-grid-small {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.movie-grid-small .flip-card {
+  aspect-ratio: 2/3;
+  height: auto;
+  min-height: unset;
+}
+
+.movie-grid-small .flip-card .cover-image {
+  border-radius: 8px;
+}
+
+.movie-grid-small .flip-front-overlay {
+  padding: 8px;
+}
+
+.movie-grid-small .flip-front-title {
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.movie-grid-small .flip-front-meta {
+  font-size: 10px;
+}
+
+.movie-grid-small .flip-front-score {
+  font-size: 10px;
+  padding: 2px 6px;
+}
+
+.just-added-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.just-added-section.hidden {
+  display: none;
+}
+
 .modal-body {
   display: grid;
   grid-template-columns: 260px 1fr;
@@ -3086,4 +3253,65 @@ label {
   text-transform: uppercase;
   letter-spacing: 0.3px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+/* ===== Disk Space ===== */
+.disk-space-container {
+  margin: 12px 0;
+}
+
+.disk-space-item {
+  margin-bottom: 10px;
+}
+
+.disk-space-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.disk-space-label {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.disk-space-info {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.disk-space-bar {
+  height: 8px;
+  background: var(--bg);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.disk-space-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.disk-space-fill.low {
+  background: linear-gradient(90deg, var(--success), #34d399);
+}
+
+.disk-space-fill.medium {
+  background: linear-gradient(90deg, var(--warning), #fbbf24);
+}
+
+.disk-space-fill.high {
+  background: linear-gradient(90deg, var(--danger), #ff6b6b);
+}
+
+.disk-space-details {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--text-muted);
 }

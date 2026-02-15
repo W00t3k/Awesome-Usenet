@@ -5,7 +5,6 @@ const template = document.getElementById("rec-card-template");
 const swarmMap = document.getElementById("swarm-map");
 const agentLog = document.getElementById("agent-log");
 const generatedAtEl = document.getElementById("generated-at");
-const memoryCountEl = document.getElementById("memory-count");
 const countInput = document.getElementById("count");
 const movieDayContentEl = document.getElementById("movie-day-content");
 const heroBackdropEl = document.getElementById("hero-backdrop");
@@ -47,7 +46,23 @@ const modalTrailerContainer = document.getElementById("modal-trailer-container")
 const modalDownloadBtn = document.getElementById("modal-download");
 const modalSkipBtn = document.getElementById("modal-skip");
 
+// Login elements
+const loginModal = document.getElementById("login-modal");
+const loginBtn = document.getElementById("login-btn");
+const logoutBtn = document.getElementById("logout-btn");
+const userDropdown = document.getElementById("user-dropdown");
+const userNameEl = document.getElementById("user-name");
+const googleLoginSection = document.getElementById("google-login-section");
+const googleNotConfigured = document.getElementById("google-not-configured");
+
 const DOWNLOAD_HISTORY_CLEAR_KEY = "majic_download_history_cleared_at";
+const AUTH_TOKEN_KEY = "majic_auth_token";
+const AUTH_USER_KEY = "majic_auth_user";
+
+// Just Added elements
+const justAddedSection = document.getElementById("just-added-section");
+const justAddedGrid = document.getElementById("just-added-grid");
+const justAddedDateEl = document.getElementById("just-added-date");
 const THEME_KEY = "majic_theme";
 let downloadHistoryClearedAt = localStorage.getItem(DOWNLOAD_HISTORY_CLEAR_KEY);
 let currentRecommendations = [];
@@ -110,6 +125,48 @@ async function updateStatusBanner() {
     }
   } catch (err) {
     radarrStatusEl.innerHTML = '<span class="status-error">⚠ Cannot check download service</span>';
+  }
+}
+
+// Disk space display
+const diskSpaceContainer = document.getElementById("disk-space-container");
+async function loadDiskSpace() {
+  if (!diskSpaceContainer) return;
+  try {
+    const res = await fetch("/api/disk-space");
+    const data = await res.json();
+    if (!data.ok || !data.disks || data.disks.length === 0) {
+      diskSpaceContainer.innerHTML = '';
+      return;
+    }
+
+    let html = '';
+    for (const disk of data.disks) {
+      const percent = disk.percent_used || 0;
+      let levelClass = 'low';
+      if (percent >= 90) levelClass = 'high';
+      else if (percent >= 70) levelClass = 'medium';
+
+      html += `
+        <div class="disk-space-item">
+          <div class="disk-space-header">
+            <span class="disk-space-label">${disk.label || disk.path}</span>
+            <span class="disk-space-info">${disk.free_human} free</span>
+          </div>
+          <div class="disk-space-bar">
+            <div class="disk-space-fill ${levelClass}" style="width: ${percent}%"></div>
+          </div>
+          <div class="disk-space-details">
+            <span>${disk.used_human} used</span>
+            <span>${disk.total_human} total</span>
+          </div>
+        </div>
+      `;
+    }
+    diskSpaceContainer.innerHTML = html;
+  } catch (err) {
+    console.error("Failed to load disk space:", err);
+    diskSpaceContainer.innerHTML = '';
   }
 }
 
@@ -201,7 +258,7 @@ function renderSourceIndicatorsHtml(movie) {
 
   // Priority order for indicators
   const priorityOrder = [
-    "oscars", "criterion", "rt", "rottentomatoes", "rogerebert",
+    "oscars", "criterion", "rogerebert",
     "nzbgeek", "drunkenslug", "plex", "radarr", "upcoming", "tmdb",
     "releases", "2160p", "1080p", "hdr"
   ];
@@ -213,10 +270,20 @@ function renderSourceIndicatorsHtml(movie) {
   for (const tag of tags) {
     const key = canonicalSourceKey(tag) || tag.toLowerCase();
     if (normalized.has(key)) continue;
-    // Skip generic tags
-    if (["usenet", "nzbgeek-rss", "tmdb-discover", "now-playing", "unreleased"].includes(key)) continue;
+    // Skip generic/duplicate tags and remove noisy dots on covers.
+    if ([
+      "usenet",
+      "nzbgeek-rss",
+      "tmdb-discover",
+      "now-playing",
+      "unreleased",
+      "rt",
+      "rottentomatoes",
+      "upcoming",
+      "tmdb",
+    ].includes(key)) continue;
     normalized.add(key);
-    const tooltip = SOURCE_TOOLTIP_LABELS[key];
+    const tooltip = SOURCE_TOOLTIP_LABELS[key] || sourceLabel(key);
     if (tooltip) {
       indicatorList.push({ key, tooltip, priority: priorityOrder.indexOf(key) });
     }
@@ -263,6 +330,16 @@ function sourceOriginText(movie) {
     return null;
   }
   return labels.slice(0, 3).join(" · ");
+}
+
+function frontSourceOriginText(movie) {
+  const origin = sourceOriginText(movie);
+  if (!origin) return null;
+  const filtered = origin
+    .split("·")
+    .map((part) => part.trim())
+    .filter((part) => part && part.toUpperCase() !== "TMDB");
+  return filtered.length ? filtered.join(" · ") : null;
 }
 
 function sourceAttributionText(movie) {
@@ -721,8 +798,9 @@ async function loadDownloadActivity(silent = false) {
     clearList(downloadHistoryEl);
   }
 
-  // Also update the status banner
+  // Also update the status banner and disk space
   updateStatusBanner();
+  loadDiskSpace();
 
   try {
     const [healthRes, historyRes] = await Promise.all([
@@ -1568,7 +1646,7 @@ function buildRecommendationCardNode(rec, index) {
 
   const frontMeta = node.querySelector(".flip-front-meta");
   if (frontMeta) frontMeta.textContent = frontMetaText;
-  const originText = sourceOriginText(movie);
+  const originText = frontSourceOriginText(movie);
 
   const frontOriginEl = node.querySelector(".front-source-origin");
   if (frontOriginEl) {
@@ -1605,20 +1683,6 @@ function buildRecommendationCardNode(rec, index) {
     imageEl.src = generatedPosterDataUrl(movie);
     imageEl.style.display = "block";
     if (fallbackEl) fallbackEl.style.display = "none";
-  }
-
-  // --- Source Indicators (dots with hover tooltips) ---
-  const frontEl = node.querySelector(".flip-card-front");
-  if (frontEl) {
-    const indicatorsHtml = renderSourceIndicatorsHtml(movie);
-    if (indicatorsHtml) {
-      const indicatorsContainer = document.createElement("div");
-      indicatorsContainer.innerHTML = indicatorsHtml;
-      const indicatorsEl = indicatorsContainer.firstElementChild;
-      if (indicatorsEl) {
-        frontEl.appendChild(indicatorsEl);
-      }
-    }
   }
 
   // --- Back ---
@@ -2153,11 +2217,6 @@ async function loadRecommendations() {
 
     renderHeroMovie(heroRec);
     renderRecommendations(gridRecs);
-
-    const prefAgent = (data.agents || []).find((a) => a.agent === "preferences");
-    if (memoryCountEl) {
-      memoryCountEl.textContent = prefAgent ? `Memory: ${prefAgent.item_count}` : "";
-    }
   } catch (err) {
     console.error("Failed to load recommendations:", err);
   }
@@ -3097,9 +3156,271 @@ renderRecommendations = function(recommendations) {
   }, 100);
 };
 
+// ============================================================================
+// Just Added Section (Today's Releases)
+// ============================================================================
+
+async function loadJustAdded() {
+  if (!justAddedGrid || !justAddedSection) return;
+
+  if (justAddedDateEl) {
+    justAddedDateEl.textContent = "New Releases";
+  }
+
+  try {
+    // First try usenet releases
+    let releases = [];
+    try {
+      const usenetRes = await fetch("/api/usenet/latest?limit=12");
+      if (usenetRes.ok) {
+        const usenetData = await usenetRes.json();
+        releases = usenetData.releases || [];
+      }
+    } catch { /* ignore */ }
+
+    // If no usenet, get from recommendations (now-playing + upcoming)
+    if (releases.length === 0) {
+      const recRes = await fetch("/api/recommendations?count=50&sort=release-current");
+      if (recRes.ok) {
+        const recData = await recRes.json();
+        const recs = recData.recommendations || [];
+        // Filter to recent releases (now-playing, upcoming with release dates)
+        releases = recs
+          .filter(r => {
+            const tags = r.movie?.source_tags || [];
+            return tags.includes("now-playing") || tags.includes("nzbgeek") || tags.includes("drunkenslug");
+          })
+          .slice(0, 10)
+          .map(r => ({
+            title: r.movie.title,
+            year: r.movie.year,
+            poster_url: r.movie.poster_url,
+            score: r.movie.rottentomatoes_score,
+          }));
+      }
+    }
+
+    if (releases.length === 0) {
+      justAddedSection.classList.add("hidden");
+      return;
+    }
+
+    renderJustAdded(releases.slice(0, 10));
+  } catch (err) {
+    console.error("Failed to load just added:", err);
+    justAddedSection.classList.add("hidden");
+  }
+}
+
+function renderJustAdded(releases) {
+  if (!justAddedGrid) return;
+
+  if (releases.length === 0) {
+    justAddedGrid.innerHTML = '<p class="just-added-empty">No new releases today</p>';
+    return;
+  }
+
+  justAddedGrid.innerHTML = releases
+    .map((release) => {
+      const posterUrl = release.poster_url || "";
+      const title = release.title || "Unknown";
+      const year = release.year || "";
+      const score = release.score || null;
+
+      const posterHtml = posterUrl
+        ? `<img class="cover-image" src="${posterUrl}" alt="${title}" loading="lazy" />`
+        : `<div class="cover-fallback"><span class="cover-monogram">${title.substring(0, 2).toUpperCase()}</span></div>`;
+
+      const scoreHtml = score
+        ? `<div class="flip-front-score score-badge">${score}</div>`
+        : "";
+
+      const overview = (release.overview || "").replace(/"/g, '&quot;');
+      return `
+        <article class="flip-card" data-title="${title}" data-year="${year}" data-poster="${posterUrl}" data-overview="${overview}">
+          <div class="flip-card-inner">
+            <div class="flip-card-front">
+              ${posterHtml}
+              ${scoreHtml}
+              <div class="flip-front-overlay">
+                <div class="flip-front-title">${title}</div>
+                <p class="flip-front-meta">${year}</p>
+              </div>
+            </div>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+
+  // Add click handlers
+  justAddedGrid.querySelectorAll(".flip-card").forEach((card) => {
+    card.addEventListener("click", async () => {
+      const title = card.dataset.title;
+      const year = card.dataset.year;
+      const posterUrl = card.dataset.poster || "";
+      const overview = card.dataset.overview || "";
+
+      // First try to find in recommendations
+      const found = currentRecommendations.find(
+        (r) => r.movie.title.toLowerCase() === title.toLowerCase() && String(r.movie.year) === String(year)
+      );
+      if (found) {
+        openMovieModal(found);
+        return;
+      }
+
+      // Create a movie object for the modal
+      const movieData = {
+        movie: {
+          title: title,
+          year: parseInt(year) || null,
+          poster_url: posterUrl,
+          overview: overview,
+          source_tags: ["nzbgeek"],
+          available_on_usenet: true,
+        },
+        score: 0,
+        reason: "New release from NZBGeek",
+      };
+      openMovieModal(movieData);
+    });
+  });
+
+  justAddedSection.classList.remove("hidden");
+}
+
+// ============================================================================
+// Authentication
+// ============================================================================
+
+function getAuthToken() {
+  return localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+function setAuthToken(token) {
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+}
+
+function clearAuth() {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  localStorage.removeItem(AUTH_USER_KEY);
+}
+
+function getAuthUser() {
+  const data = localStorage.getItem(AUTH_USER_KEY);
+  return data ? JSON.parse(data) : null;
+}
+
+function setAuthUser(user) {
+  localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+}
+
+function updateAuthUI() {
+  const user = getAuthUser();
+  if (user && loginBtn && userDropdown && userNameEl) {
+    loginBtn.classList.add("hidden");
+    userDropdown.classList.remove("hidden");
+    userNameEl.textContent = user.username;
+  } else if (loginBtn && userDropdown) {
+    loginBtn.classList.remove("hidden");
+    userDropdown.classList.add("hidden");
+  }
+}
+
+async function checkGoogleOAuthEnabled() {
+  try {
+    const res = await fetch("/api/auth/google/enabled");
+    const data = await res.json();
+    if (!data.enabled) {
+      if (googleLoginSection) googleLoginSection.classList.add("hidden");
+      if (googleNotConfigured) googleNotConfigured.classList.remove("hidden");
+    }
+  } catch {
+    if (googleLoginSection) googleLoginSection.classList.add("hidden");
+    if (googleNotConfigured) googleNotConfigured.classList.remove("hidden");
+  }
+}
+
+async function fetchCurrentUser() {
+  const token = getAuthToken();
+  if (!token) return null;
+
+  try {
+    const res = await fetch("/api/auth/me", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      clearAuth();
+      return null;
+    }
+    const user = await res.json();
+    setAuthUser(user);
+    return user;
+  } catch {
+    clearAuth();
+    return null;
+  }
+}
+
+function showModal(modal) {
+  if (modal) {
+    modal.classList.remove("hidden");
+    modal.setAttribute("aria-hidden", "false");
+  }
+}
+
+function hideModal(modal) {
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.setAttribute("aria-hidden", "true");
+  }
+}
+
+function initAuth() {
+  // Check for token in URL (from Google OAuth callback)
+  const urlParams = new URLSearchParams(window.location.search);
+  const tokenFromUrl = urlParams.get("token");
+  if (tokenFromUrl) {
+    setAuthToken(tokenFromUrl);
+    // Remove token from URL
+    window.history.replaceState({}, document.title, window.location.pathname);
+    // Fetch user info
+    fetchCurrentUser().then(() => updateAuthUI());
+  }
+
+  // Check Google OAuth availability
+  checkGoogleOAuthEnabled();
+
+  // Login button - show modal
+  if (loginBtn) {
+    loginBtn.addEventListener("click", () => showModal(loginModal));
+  }
+
+  // Logout button
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", () => {
+      clearAuth();
+      updateAuthUI();
+    });
+  }
+
+  // Close login modal
+  if (loginModal) {
+    const closeBtn = loginModal.querySelector(".modal-close");
+    const backdrop = loginModal.querySelector(".modal-backdrop");
+    if (closeBtn) closeBtn.addEventListener("click", () => hideModal(loginModal));
+    if (backdrop) backdrop.addEventListener("click", () => hideModal(loginModal));
+  }
+
+  // Load current user and update UI
+  fetchCurrentUser().then(() => updateAuthUI());
+}
+
 // Initialize
 (async function init() {
   initTheme();
+  initAuth();
   renderHomeSourceFilters();
   renderAiSuggestions();
   await Promise.all([
@@ -3107,8 +3428,10 @@ renderRecommendations = function(recommendations) {
     loadDownloadActivity(),
     loadRadarrMonitored(),
     updateStatusBanner(),
+    loadDiskSpace(),
     checkAiStatus(),
     loadMoods(),
+    loadJustAdded(),
   ]);
   await loadRecommendations();
 

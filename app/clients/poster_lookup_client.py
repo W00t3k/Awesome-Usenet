@@ -108,7 +108,39 @@ class PosterLookupClient:
             if result:
                 return result
 
+        # Try with simplified title (remove common suffixes like Pilot, Part X, etc.)
+        simplified = self._simplify_title(title)
+        if simplified and simplified.lower() != title.lower():
+            result = await self._tmdb_search_best(simplified, year)
+            if result:
+                return result
+            if year is not None:
+                result = await self._tmdb_search_best(simplified, None)
+                if result:
+                    return result
+
         return None
+
+    @staticmethod
+    def _simplify_title(title: str) -> str:
+        """Remove common suffixes that might prevent TMDB matching."""
+        import re
+        # Remove common suffixes
+        patterns = [
+            r'\s+Pilot$',
+            r'\s+Part\s*\d+$',
+            r'\s+Episode\s*\d+$',
+            r'\s+Chapter\s*\d+$',
+            r'\s+Vol\.?\s*\d+$',
+            r'\s+Volume\s*\d+$',
+            r'\s+Season\s*\d+$',
+            r'\s+S\d+E\d+$',
+            r'\s+\d{4}$',  # Year at end
+        ]
+        result = title.strip()
+        for pattern in patterns:
+            result = re.sub(pattern, '', result, flags=re.IGNORECASE)
+        return result.strip()
 
     async def _tmdb_search_best(self, title: str, year: int | None) -> dict[str, Any] | None:
         try:

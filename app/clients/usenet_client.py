@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from urllib.parse import urlencode, urlparse, parse_qsl, urlunparse
 from xml.etree import ElementTree
 
 from app.clients.http_client import HTTPClient
+
+logger = logging.getLogger(__name__)
 
 
 class UsenetClient:
@@ -93,8 +96,12 @@ class UsenetClient:
 
     async def movie_rss_feed(self, rss_url: str, api_key: str | None = None) -> list[dict]:
         resolved_url = self._resolve_rss_url(rss_url=rss_url, api_key=api_key or self._api_key)
+        logger.info(f"Fetching RSS from: {resolved_url[:80]}...")
         xml_text = await self._http.get_text(resolved_url)
-        return self._parse_rss_items(xml_text)
+        logger.info(f"Received {len(xml_text)} bytes, starts with: {xml_text[:100]}")
+        items = self._parse_rss_items(xml_text)
+        logger.info(f"Parsed {len(items)} items from RSS")
+        return items
 
     @staticmethod
     def _resolve_rss_url(rss_url: str, api_key: str | None) -> str:
