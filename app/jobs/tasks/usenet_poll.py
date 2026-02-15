@@ -22,7 +22,21 @@ async def _async_poll() -> dict:
     """Async implementation of usenet polling."""
     from app.config import settings
     from app.clients.usenet_client import UsenetClient
+    from app.services.embedding import EmbeddingService
+    from app.services.memory_store import MemoryStore
     from app.services.usenet_parser import parse_and_deduplicate
+
+    project_root = Path(__file__).resolve().parents[3]
+    store: MemoryStore | None = None
+    job_id: int = 0
+    try:
+        store = MemoryStore(
+            db_path=project_root / settings.memory_db_path,
+            embedding_service=EmbeddingService(),
+        )
+        job_id = store.create_sync_job("usenet_poll")
+    except Exception as exc:
+        logger.warning(f"Could not initialize sync tracking for usenet poll: {exc}")
 
     collected: list[str] = []
     errors: list[str] = []
@@ -70,6 +84,9 @@ async def _async_poll() -> dict:
     if collected:
         parsed = parse_and_deduplicate(collected)
         logger.info(f"Parsed {len(parsed)} unique releases from {len(collected)} total")
+        if store and job_id:
+            # Record as successful when we have at least some release data.
+            store.complete_sync_job(job_id, items_processed=len(parsed), error_message=None)
 
         # Store in memory for quick access (optional - could use Redis cache)
         # For now just log the results
@@ -79,6 +96,10 @@ async def _async_poll() -> dict:
             "unique_releases": len(parsed),
             "errors": errors,
         }
+
+    if store and job_id:
+        sync_error = "; ".join(errors) if errors else "No releases collected"
+        store.complete_sync_job(job_id, items_processed=0, error_message=sync_error)
 
     return {
         "status": "no_data",

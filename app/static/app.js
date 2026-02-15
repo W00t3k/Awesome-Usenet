@@ -63,6 +63,10 @@ const AUTH_USER_KEY = "majic_auth_user";
 const justAddedSection = document.getElementById("just-added-section");
 const justAddedGrid = document.getElementById("just-added-grid");
 const justAddedDateEl = document.getElementById("just-added-date");
+let justAddedCheckedAt = null;
+let justAddedLastPollAt = null;
+let justAddedPollIntervalMinutes = null;
+let justAddedMetaTimer = null;
 const THEME_KEY = "majic_theme";
 let downloadHistoryClearedAt = localStorage.getItem(DOWNLOAD_HISTORY_CLEAR_KEY);
 let currentRecommendations = [];
@@ -3160,12 +3164,62 @@ renderRecommendations = function(recommendations) {
 // Just Added Section (Today's Releases)
 // ============================================================================
 
+function parseTimestamp(raw) {
+  if (!raw) return null;
+  const value = String(raw).trim();
+  if (!value) return null;
+  const normalized = value.includes("T")
+    ? value
+    : `${value.replace(" ", "T")}Z`;
+  const dt = new Date(normalized);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+function relativeTimeFromNow(raw) {
+  const dt = raw instanceof Date ? raw : parseTimestamp(raw);
+  if (!dt) return null;
+  const deltaSec = Math.max(0, Math.floor((Date.now() - dt.getTime()) / 1000));
+  if (deltaSec < 60) return "just now";
+  const deltaMin = Math.floor(deltaSec / 60);
+  if (deltaMin < 60) return `${deltaMin}m ago`;
+  const deltaHr = Math.floor(deltaMin / 60);
+  if (deltaHr < 24) return `${deltaHr}h ago`;
+  const deltaDay = Math.floor(deltaHr / 24);
+  return `${deltaDay}d ago`;
+}
+
+function formatJustAddedMeta() {
+  const parts = [];
+  const lastCheckLabel = relativeTimeFromNow(justAddedLastPollAt || justAddedCheckedAt);
+  if (lastCheckLabel) {
+    parts.push(`Last check ${lastCheckLabel}`);
+  } else {
+    parts.push("New Releases");
+  }
+
+  if (Number.isFinite(justAddedPollIntervalMinutes) && justAddedPollIntervalMinutes > 0) {
+    parts.push(`Every ${justAddedPollIntervalMinutes}m`);
+  }
+  return parts.join(" • ");
+}
+
+function updateJustAddedMeta() {
+  if (!justAddedDateEl) return;
+  justAddedDateEl.textContent = formatJustAddedMeta();
+}
+
+function startJustAddedMetaTimer() {
+  if (justAddedMetaTimer) return;
+  justAddedMetaTimer = setInterval(updateJustAddedMeta, 60000);
+}
+
 async function loadJustAdded() {
   if (!justAddedGrid || !justAddedSection) return;
 
-  if (justAddedDateEl) {
-    justAddedDateEl.textContent = "New Releases";
-  }
+  justAddedCheckedAt = new Date().toISOString();
+  justAddedLastPollAt = null;
+  justAddedPollIntervalMinutes = null;
+  updateJustAddedMeta();
 
   try {
     // First try usenet releases
@@ -3175,6 +3229,12 @@ async function loadJustAdded() {
       if (usenetRes.ok) {
         const usenetData = await usenetRes.json();
         releases = usenetData.releases || [];
+        justAddedCheckedAt = usenetData.checked_at || justAddedCheckedAt;
+        justAddedLastPollAt = usenetData.last_poll_at || null;
+        const interval = Number(usenetData.poll_interval_minutes);
+        justAddedPollIntervalMinutes = Number.isFinite(interval) ? interval : null;
+        updateJustAddedMeta();
+        startJustAddedMetaTimer();
       }
     } catch { /* ignore */ }
 

@@ -1335,14 +1335,23 @@ async def get_usenet_latest(
     limit: int = Query(default=12, ge=1, le=50),
 ) -> dict:
     """Get the latest new movie releases from NZBGeek's new_movies feed."""
+    checked_at = datetime.now(UTC).isoformat()
+    last_poll_row = memory_store.last_sync_job("usenet_poll")
+    last_poll_at = (
+        (last_poll_row.get("completed_at") or last_poll_row.get("started_at"))
+        if last_poll_row
+        else None
+    )
     try:
         # Fetch from NZBGeek's dedicated new_movies RSS feed
         raw_movies = await _fetch_nzbgeek_movies(limit=limit * 3)
+        feed_source = "nzbgeek_new_movies"
 
         if not raw_movies:
             # Fallback to crawl if direct fetch fails
             data = await _crawl_usenet_releases(limit=limit * 2, query=None)
             raw_movies = data.get("items", [])
+            feed_source = "crawl_fallback"
 
         # Create poster client for enrichment
         _poster_client = None
@@ -1397,10 +1406,25 @@ async def get_usenet_latest(
             if len(enriched) >= limit:
                 break
 
-        return {"ok": True, "releases": enriched, "count": len(enriched)}
+        return {
+            "ok": True,
+            "releases": enriched,
+            "count": len(enriched),
+            "checked_at": checked_at,
+            "last_poll_at": last_poll_at,
+            "poll_interval_minutes": settings.usenet_poll_interval_minutes,
+            "feed_source": feed_source,
+        }
     except Exception as exc:
         logger.warning(f"Failed to get latest usenet: {exc}")
-        return {"ok": False, "releases": [], "error": str(exc)}
+        return {
+            "ok": False,
+            "releases": [],
+            "error": str(exc),
+            "checked_at": checked_at,
+            "last_poll_at": last_poll_at,
+            "poll_interval_minutes": settings.usenet_poll_interval_minutes,
+        }
 
 
 @app.get("/api/trailer")
