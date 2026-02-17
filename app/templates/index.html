@@ -4,27 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{{ app_title }}</title>
+    <link rel="icon" type="image/svg+xml" href="/static/logo.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@400;600;700;800&family=Outfit:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/static/styles.css?v=20260214h" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260217h" />
   </head>
   <body>
     <div class="app">
       <header class="nav">
         <a href="/" class="nav-brand">
-          <span class="brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24" role="img" focusable="false">
-              <rect x="3" y="5" width="18" height="14" rx="3"></rect>
-              <path d="M3 9h18"></path>
-              <path d="M7 5l3 4"></path>
-              <path d="M12 5l3 4"></path>
-              <path d="M17 5l3 4"></path>
-            </svg>
-          </span>
+          <img src="/static/logo.svg" alt="Majic" class="brand-logo" />
           <span class="brand-text">Majic</span>
         </a>
         <nav class="nav-links">
@@ -178,15 +171,45 @@
             <ul id="monitored-list" class="download-list"></ul>
           </section>
 
-          <section class="card swarm-card">
+          <section class="card swarm-card" id="swarm-card">
             <div class="card-header">
               <h3>Agent Swarm</h3>
-              <span id="generated-at" class="meta"></span>
+              <span class="swarm-count" id="swarm-count">0</span>
             </div>
-            <svg id="swarm-map" viewBox="0 0 800 420" role="img" aria-label="Agent swarm map"></svg>
-            <ul id="agent-log" class="download-list small" style="margin-top: 10px;"></ul>
+            <div class="swarm-preview" id="swarm-preview"></div>
+            <span id="generated-at" class="meta"></span>
           </section>
         </aside>
+
+        <!-- Swarm Modal -->
+        <div class="swarm-modal" id="swarm-modal">
+          <div class="swarm-modal-backdrop" id="swarm-modal-backdrop"></div>
+          <div class="swarm-modal-content">
+            <div class="swarm-modal-header">
+              <h2>Agent Swarm Network</h2>
+              <div class="swarm-stats">
+                <div class="stat">
+                  <div class="stat-value success" id="swarm-success-count">0</div>
+                  <div class="stat-label">Active</div>
+                </div>
+                <div class="stat">
+                  <div class="stat-value error" id="swarm-error-count">0</div>
+                  <div class="stat-label">Errors</div>
+                </div>
+              </div>
+              <button class="swarm-modal-close" id="swarm-modal-close">&times;</button>
+            </div>
+            <div class="swarm-modal-body">
+              <div class="swarm-visualization">
+                <svg id="swarm-map" viewBox="0 0 800 800" role="img" aria-label="Agent swarm visualization"></svg>
+              </div>
+              <div class="swarm-agent-list">
+                <h4>All Agents</h4>
+                <div id="agent-log"></div>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <main class="main">
           <div id="now-downloading" class="now-downloading hidden"></div>
@@ -205,7 +228,18 @@
           <section class="card just-added-section" id="just-added-section">
             <div class="card-header">
               <h2>Just Added</h2>
-              <span class="meta" id="just-added-date"></span>
+              <div class="header-actions">
+                <span class="meta" id="just-added-date"></span>
+                <button id="just-added-sync-btn" class="btn btn-sm btn-ghost" title="Sync now">
+                  <svg class="sync-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 2v6h-6"></path>
+                    <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+                    <path d="M3 22v-6h6"></path>
+                    <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+                  </svg>
+                  <span class="sync-text">Sync</span>
+                </button>
+              </div>
             </div>
             <div id="just-added-grid" class="movie-grid movie-grid-small"></div>
           </section>
@@ -232,6 +266,24 @@
             <div class="search-wrapper search-main">
               <input id="movie-search" type="search" class="search-input" placeholder="Search movies..." autocomplete="off" />
               <div id="search-results" class="search-dropdown"></div>
+            </div>
+
+            <div class="availability-filters" id="availability-filters">
+              <button type="button" class="availability-toggle active" data-filter="all">
+                🎥 All
+              </button>
+              <button type="button" class="availability-toggle" data-filter="ready">
+                <span class="toggle-icon">⚡</span>
+                Ready
+              </button>
+              <button type="button" class="availability-toggle" data-filter="unreleased">
+                <span class="toggle-icon">🎬</span>
+                Coming Soon
+              </button>
+              <button type="button" class="availability-toggle" data-filter="unavailable">
+                <span class="toggle-icon">⏳</span>
+                Not Ready
+              </button>
             </div>
 
             <div class="results-header" id="results-header">
@@ -307,7 +359,10 @@
             <div class="modal-actions">
               <button id="modal-like" class="btn btn-success" type="button">❤ Like</button>
               <button id="modal-download" class="btn btn-ghost" type="button">▶ Download</button>
+              <button id="modal-check-usenet" class="btn btn-ghost btn-check" type="button">🔍 Check Usenet</button>
+              <button id="modal-plex-watchlist" class="btn btn-ghost btn-plex" type="button">+ Plex Watchlist</button>
               <button id="modal-skip" class="btn btn-ghost" type="button">Skip</button>
+              <button id="modal-delete" class="btn btn-ghost btn-danger" type="button" style="display:none;">🗑 Delete</button>
             </div>
           </div>
         </div>
@@ -343,6 +398,6 @@
       </div>
     </div>
 
-    <script src="/static/app.js?v=20260215d" defer></script>
+    <script src="/static/app.js?v=20260217j" defer></script>
   </body>
 </html>

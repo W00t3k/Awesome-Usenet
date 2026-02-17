@@ -144,12 +144,20 @@ class UsenetClient:
             title = item.findtext("title", default="").strip()
             if not title:
                 continue
+            # Standard RSS fields
+            link = item.findtext("link", default="").strip() or None
+            # NZBGeek new_movies feed uses <movie> as the link
+            if not link:
+                link = item.findtext("movie", default="").strip() or None
             items.append(
                 {
                     "title": title,
-                    "link": item.findtext("link", default="").strip() or None,
+                    "link": link,
                     "pub_date": item.findtext("pubDate", default="").strip() or None,
                     "description": item.findtext("description", default="").strip() or None,
+                    # NZBGeek new_movies feed includes cover art and imdb id
+                    "cover_url": item.findtext("coverurl", default="").strip() or None,
+                    "imdb_id": item.findtext("imdbid", default="").strip() or None,
                 }
             )
         return items

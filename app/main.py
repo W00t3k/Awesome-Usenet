@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import html as html_lib
+import json
 import logging
 import random
 import re
@@ -11,7 +13,7 @@ logger = logging.getLogger(__name__)
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Literal
-from urllib.parse import quote
+from urllib.parse import quote, urljoin
 
 from dotenv import load_dotenv, set_key
 from fastapi import FastAPI, Query
@@ -31,6 +33,35 @@ from app.agents.releases_agent import ReleasesAgent
 from app.agents.rottentomatoes_agent import RottenTomatoesAgent
 from app.agents.upcoming_agent import UpcomingAgent
 from app.agents.usenet_agent import UsenetAgent
+# New swarm agents
+from app.agents.imdb_top250_agent import IMDbTop250Agent
+from app.agents.a24_agent import A24Agent
+from app.agents.afi_agent import AFI100Agent
+from app.agents.cannes_agent import CannesAgent
+from app.agents.ghibli_agent import GhibliAgent
+from app.agents.sundance_agent import SundanceAgent
+from app.agents.bafta_agent import BAFTAAgent
+from app.agents.golden_globes_agent import GoldenGlobesAgent
+from app.agents.blumhouse_agent import BlumhouseAgent
+from app.agents.marvel_dc_agent import MarvelDCAgent
+from app.agents.letterboxd_agent import LetterboxdAgent
+from app.agents.mubi_agent import MUBIAgent
+from app.agents.film_registry_agent import NationalFilmRegistryAgent
+from app.agents.metacritic_agent import MetacriticAgent
+from app.agents.boxoffice_agent import BoxOfficeAgent
+from app.agents.hidden_gems_agent import HiddenGemsAgent
+from app.agents.directors_agent import DirectorsAgent
+from app.agents.decades_agent import DecadesAgent
+from app.agents.sight_sound_agent import SightSoundAgent
+from app.agents.pixar_agent import PixarAgent
+from app.agents.disney_agent import DisneyAgent
+from app.agents.horror_classics_agent import HorrorClassicsAgent
+from app.agents.scifi_agent import SciFiAgent
+from app.agents.anime_agent import AnimeAgent
+from app.agents.korean_cinema_agent import KoreanCinemaAgent
+from app.agents.film_noir_agent import FilmNoirAgent
+from app.agents.neon_agent import NeonAgent
+from app.clients.http_client import HTTPClient
 from app.clients.ollama_client import OllamaClient
 from app.clients.plex_client import PlexClient
 from app.clients.poster_lookup_client import PosterLookupClient
@@ -297,6 +328,115 @@ def _build_runtime() -> tuple[MemoryStore, SwarmOrchestrator]:
             timeout_seconds=settings.source_timeout_seconds,
         ),
         PreferenceAgent(memory_store=memory_store),
+        # New swarm agents
+        IMDbTop250Agent(
+            dataset_path=project_root / "data/imdb_top250.json",
+            memory_store=memory_store,
+        ),
+        A24Agent(
+            dataset_path=project_root / "data/a24_films.json",
+            memory_store=memory_store,
+        ),
+        AFI100Agent(
+            dataset_path=project_root / "data/afi100.json",
+            memory_store=memory_store,
+        ),
+        CannesAgent(
+            dataset_path=project_root / "data/cannes_palme_dor.json",
+            memory_store=memory_store,
+        ),
+        GhibliAgent(
+            dataset_path=project_root / "data/ghibli_films.json",
+            memory_store=memory_store,
+        ),
+        SundanceAgent(
+            dataset_path=project_root / "data/sundance_films.json",
+            memory_store=memory_store,
+        ),
+        BAFTAAgent(
+            dataset_path=project_root / "data/bafta_winners.json",
+            memory_store=memory_store,
+        ),
+        GoldenGlobesAgent(
+            dataset_path=project_root / "data/golden_globes.json",
+            memory_store=memory_store,
+        ),
+        BlumhouseAgent(
+            dataset_path=project_root / "data/blumhouse_films.json",
+            memory_store=memory_store,
+        ),
+        MarvelDCAgent(
+            dataset_path=project_root / "data/marvel_dc.json",
+            memory_store=memory_store,
+        ),
+        LetterboxdAgent(
+            dataset_path=project_root / "data/letterboxd_top.json",
+            memory_store=memory_store,
+        ),
+        MUBIAgent(
+            dataset_path=project_root / "data/mubi_curated.json",
+            memory_store=memory_store,
+        ),
+        NationalFilmRegistryAgent(
+            dataset_path=project_root / "data/film_registry.json",
+            memory_store=memory_store,
+        ),
+        MetacriticAgent(
+            dataset_path=project_root / "data/metacritic_90.json",
+            memory_store=memory_store,
+        ),
+        BoxOfficeAgent(
+            dataset_path=project_root / "data/boxoffice_hits.json",
+            memory_store=memory_store,
+        ),
+        HiddenGemsAgent(
+            dataset_path=project_root / "data/hidden_gems.json",
+            memory_store=memory_store,
+        ),
+        DirectorsAgent(
+            dataset_path=project_root / "data/directors_spotlight.json",
+            memory_store=memory_store,
+        ),
+        DecadesAgent(
+            dataset_path=project_root / "data/decades_essentials.json",
+            memory_store=memory_store,
+        ),
+        SightSoundAgent(
+            dataset_path=project_root / "data/sight_sound_top100.json",
+            memory_store=memory_store,
+        ),
+        PixarAgent(
+            dataset_path=project_root / "data/pixar_films.json",
+            memory_store=memory_store,
+        ),
+        DisneyAgent(
+            dataset_path=project_root / "data/disney_classics.json",
+            memory_store=memory_store,
+        ),
+        HorrorClassicsAgent(
+            dataset_path=project_root / "data/horror_classics.json",
+            memory_store=memory_store,
+        ),
+        SciFiAgent(
+            dataset_path=project_root / "data/scifi_essentials.json",
+            memory_store=memory_store,
+        ),
+        AnimeAgent(
+            dataset_path=project_root / "data/anime_essentials.json",
+            memory_store=memory_store,
+        ),
+        KoreanCinemaAgent(
+            dataset_path=project_root / "data/korean_cinema.json",
+            memory_store=memory_store,
+        ),
+        FilmNoirAgent(
+            dataset_path=project_root / "data/film_noir.json",
+            memory_store=memory_store,
+        ),
+        NeonAgent(
+            dataset_path=project_root / "data/neon_films.json",
+            memory_store=memory_store,
+        ),
     ]
 
     recommender = Recommender(memory_store=memory_store)
@@ -608,10 +748,17 @@ def _build_download_health_payload(queue_rows: list[dict]) -> dict:
         except (TypeError, ValueError):
             movie_id = None
 
+        tmdb_id = movie.get("tmdbId")
+        try:
+            tmdb_id = int(tmdb_id) if tmdb_id is not None else None
+        except (TypeError, ValueError):
+            tmdb_id = None
+
         items.append(
             {
                 "queue_id": queue_id,
                 "movie_id": movie_id,
+                "tmdb_id": tmdb_id,
                 "title": title,
                 "year": year if isinstance(year, int) else None,
                 "status": status,
@@ -1045,7 +1192,7 @@ async def get_movies_by_year(
 async def get_mood_recommendations(
     mood_name: str,
     user_id: str = Query(default="default"),
-    count: int = Query(default=24, ge=1, le=200),
+    count: int = Query(default=24, ge=1, le=500),
     year_from: int | None = Query(default=None),
     year_to: int | None = Query(default=None),
 ) -> dict:
@@ -1057,7 +1204,7 @@ async def get_mood_recommendations(
     # Get base recommendations
     response = await swarm.recommend_filtered(
         user_id=user_id,
-        count=min(count * 4, 400),
+        count=min(count * 4, 600),
         sort_mode=None,
         required_sources=None,
         release_date_from=None,
@@ -1364,11 +1511,225 @@ async def get_usenet_releases(
 
 
 async def _fetch_nzbgeek_movies(limit: int = 100) -> list[dict]:
-    """Fetch new movie releases from NZBGeek using the dedicated new_movies RSS feed."""
-    # Get API key from settings - try to extract from RSS URL if not set directly
+    """Fetch new movie releases from NZBGeek GeekSeek new_movies page."""
+
+    def parse_geekseek_payload(raw: str, max_items: int) -> list[dict]:
+        text = (raw or "").strip()
+        if not text:
+            return []
+
+        # Some NZBGeek routes can respond with RSS/XML depending on session/auth state.
+        lowered = text.lower()
+        if "<rss" in lowered and "<item" in lowered:
+            try:
+                return UsenetClient._parse_rss_items(text)[:max_items]
+            except Exception:
+                pass
+
+        rows: list[dict] = []
+        seen_links: set[str] = set()
+        seen_titles: set[str] = set()
+
+        def add_row(
+            *,
+            title: str,
+            link: str | None,
+            pub_date: str | None = None,
+            description: str | None = None,
+            cover_url: str | None = None,
+            imdb_id: str | None = None,
+        ) -> None:
+            cleaned_title = re.sub(r"\s+", " ", (title or "")).strip()
+            if not cleaned_title:
+                return
+            title_key = cleaned_title.casefold()
+            link_key = (link or "").strip()
+            if title_key in seen_titles:
+                return
+            if link_key and link_key in seen_links:
+                return
+            seen_titles.add(title_key)
+            if link_key:
+                seen_links.add(link_key)
+            rows.append(
+                {
+                    "title": cleaned_title,
+                    "link": link_key or None,
+                    "pub_date": (pub_date or "").strip() or None,
+                    "description": (description or "").strip() or None,
+                    "cover_url": (cover_url or "").strip() or None,
+                    "imdb_id": (imdb_id or "").strip() or None,
+                }
+            )
+
+        date_re = re.compile(
+            r"\b(?:\d{4}-\d{2}-\d{2}|[A-Z][a-z]{2,9}\s+\d{1,2},\s+\d{4}|\d{1,2}/\d{1,2}/\d{4})\b"
+        )
+        imdb_re = re.compile(r"(tt\d{6,10})")
+
+        def parse_with_regex() -> None:
+            anchor_re = re.compile(
+                r"<a[^>]*href=[\"'](?P<href>[^\"']+)[\"'][^>]*>(?P<body>.*?)</a>",
+                re.IGNORECASE | re.DOTALL,
+            )
+            title_attr_re = re.compile(r"title=[\"'](?P<title>[^\"']+)[\"']", re.IGNORECASE)
+            tag_re = re.compile(r"<[^>]+>")
+            img_re = re.compile(
+                r"<img[^>]*(?:data-src|src)=[\"'](?P<src>[^\"']+)[\"'][^>]*>",
+                re.IGNORECASE | re.DOTALL,
+            )
+
+            for match in anchor_re.finditer(text):
+                href = str(match.group("href") or "").strip()
+                href_lower = href.lower()
+                if "/details/" not in href_lower and "t=get" not in href_lower:
+                    continue
+
+                full_anchor = match.group(0) or ""
+                title_match = title_attr_re.search(full_anchor)
+                raw_title = str(title_match.group("title") if title_match else "").strip()
+                if not raw_title:
+                    body_text = tag_re.sub(" ", match.group("body") or "")
+                    raw_title = re.sub(r"\s+", " ", html_lib.unescape(body_text)).strip()
+
+                if not raw_title:
+                    continue
+                if raw_title.casefold() in {"download", "download nzb", "get nzb"}:
+                    continue
+
+                start = max(0, match.start() - 800)
+                end = min(len(text), match.end() + 800)
+                context = text[start:end]
+                context_plain = re.sub(r"\s+", " ", html_lib.unescape(tag_re.sub(" ", context))).strip()
+
+                pub_date_match = date_re.search(context_plain)
+                pub_date = pub_date_match.group(0) if pub_date_match else None
+
+                imdb_match = imdb_re.search(context)
+                imdb_id = imdb_match.group(1) if imdb_match else None
+
+                image_match = img_re.search(context)
+                cover_url = image_match.group("src").strip() if image_match else None
+                if cover_url:
+                    cover_url = urljoin("https://nzbgeek.info", cover_url)
+
+                add_row(
+                    title=html_lib.unescape(raw_title),
+                    link=urljoin("https://nzbgeek.info", href),
+                    pub_date=pub_date,
+                    description=context_plain,
+                    cover_url=cover_url,
+                    imdb_id=imdb_id,
+                )
+                if len(rows) >= max_items:
+                    break
+
+        try:
+            from bs4 import BeautifulSoup
+        except Exception:
+            parse_with_regex()
+            return rows[:max_items]
+
+        soup = BeautifulSoup(text, "html.parser")
+
+        for anchor in soup.select("a[href]"):
+            href = str(anchor.get("href") or "").strip()
+            href_lower = href.lower()
+            if not href:
+                continue
+            if "/details/" not in href_lower and "t=get" not in href_lower:
+                continue
+
+            container = anchor.find_parent(["article", "li", "tr", "div"]) or anchor
+            raw_title = (
+                str(anchor.get("title") or "").strip()
+                or str(container.get("data-title") or "").strip()
+                or anchor.get_text(" ", strip=True)
+            )
+            if not raw_title:
+                continue
+            if raw_title.casefold() in {"download", "download nzb", "get nzb"}:
+                continue
+
+            context_text = container.get_text(" ", strip=True)
+            pub_date_match = date_re.search(context_text or "")
+            pub_date = pub_date_match.group(0) if pub_date_match else None
+
+            img = container.find("img")
+            cover_url = None
+            if img is not None:
+                cover_url = str(img.get("data-src") or img.get("src") or "").strip() or None
+                if cover_url:
+                    cover_url = urljoin("https://nzbgeek.info", cover_url)
+
+            imdb_id = None
+            imdb_link = container.find("a", href=re.compile(r"imdb\.com/title/tt\d{6,10}", re.IGNORECASE))
+            if imdb_link:
+                match = imdb_re.search(str(imdb_link.get("href") or ""))
+                if match:
+                    imdb_id = match.group(1)
+
+            full_link = urljoin("https://nzbgeek.info", href)
+            add_row(
+                title=raw_title,
+                link=full_link,
+                pub_date=pub_date,
+                description=context_text,
+                cover_url=cover_url,
+                imdb_id=imdb_id,
+            )
+
+            if len(rows) >= max_items:
+                break
+
+        # Some page variants expose preloaded JSON blobs with richer fields.
+        if len(rows) < max_items:
+            for script in soup.select("script[type='application/ld+json'], script"):
+                script_text = (script.string or script.get_text() or "").strip()
+                if not script_text or "new_movies" not in script_text and "itemListElement" not in script_text:
+                    continue
+                try:
+                    payload = json.loads(script_text)
+                except Exception:
+                    continue
+
+                objects = payload if isinstance(payload, list) else [payload]
+                for obj in objects:
+                    if not isinstance(obj, dict):
+                        continue
+                    items = obj.get("itemListElement")
+                    if not isinstance(items, list):
+                        continue
+                    for item in items:
+                        if not isinstance(item, dict):
+                            continue
+                        target = item.get("item") if isinstance(item.get("item"), dict) else item
+                        title = str(target.get("name") or target.get("title") or "").strip()
+                        if not title:
+                            continue
+                        add_row(
+                            title=title,
+                            link=target.get("url"),
+                            pub_date=target.get("datePublished") or target.get("dateCreated"),
+                            description=target.get("description"),
+                            cover_url=target.get("image"),
+                            imdb_id=None,
+                        )
+                        if len(rows) >= max_items:
+                            break
+                    if len(rows) >= max_items:
+                        break
+                if len(rows) >= max_items:
+                    break
+
+        if not rows:
+            parse_with_regex()
+
+        return rows[:max_items]
+
+    # Get API key from settings
     api_key = settings.nzbgeek_api_key or ""
     if not api_key and settings.nzbgeek_rss_url:
-        # Try to extract apikey or r= param from URL
         match = re.search(r'(?:apikey|r)=([^&]+)', settings.nzbgeek_rss_url)
         if match:
             api_key = match.group(1)
@@ -1376,19 +1737,48 @@ async def _fetch_nzbgeek_movies(limit: int = 100) -> list[dict]:
     if not api_key:
         return []
 
-    # Use NZBGeek's dedicated new_movies RSS feed - this is the same as geekseek.php?new_movies
-    movies_url = f"https://api.nzbgeek.info/rss?t=new_movies&limit={limit}&r={api_key}"
-
     try:
+        http = HTTPClient(timeout_seconds=settings.source_timeout_seconds)
+        geekseek_url = "https://nzbgeek.info/geekseek.php"
+        raw_payload = await http.get_text(
+            geekseek_url,
+            params={
+                "new_movies": "",
+                "r": api_key,
+                "apikey": api_key,
+            },
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+                ),
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            },
+        )
+        rows = parse_geekseek_payload(raw_payload, max_items=limit * 3)
+        if rows:
+            def parse_date(item: dict) -> float:
+                pd = item.get("pub_date") or ""
+                try:
+                    dt = parsedate_to_datetime(str(pd))
+                    return dt.timestamp()
+                except Exception:
+                    return 0.0
+
+            rows.sort(key=parse_date, reverse=True)
+            return rows[:limit]
+
+        logger.warning("NZBGeek geekseek new_movies returned no parsable rows; falling back to RSS.")
         client = UsenetClient(
             base_url="https://api.nzbgeek.info",
             api_key=api_key,
             timeout_seconds=settings.source_timeout_seconds,
         )
-        rows = await client.movie_rss_feed(rss_url=movies_url, api_key=api_key)
-        return rows
+        movies_url = f"https://api.nzbgeek.info/rss?t=new_movies&limit={limit}&r={api_key}"
+        return await client.movie_rss_feed(rss_url=movies_url, api_key=api_key)
+
     except Exception as exc:
-        logger.warning(f"Failed to fetch NZBGeek movies: {exc}")
+        logger.warning(f"Failed to fetch NZBGeek GeekSeek new_movies: {exc}")
         return []
 
 
@@ -1396,7 +1786,7 @@ async def _fetch_nzbgeek_movies(limit: int = 100) -> list[dict]:
 async def get_usenet_latest(
     limit: int = Query(default=12, ge=1, le=50),
 ) -> dict:
-    """Get the latest new movie releases from NZBGeek's new_movies feed."""
+    """Get latest new movie releases from NZBGeek GeekSeek new_movies."""
     checked_at = datetime.now(UTC).isoformat()
     last_poll_row = memory_store.last_sync_job("usenet_poll")
     last_poll_at = (
@@ -1405,9 +1795,9 @@ async def get_usenet_latest(
         else None
     )
     try:
-        # Fetch from NZBGeek's dedicated new_movies RSS feed
+        # Fetch from NZBGeek GeekSeek new_movies page/feed
         raw_movies = await _fetch_nzbgeek_movies(limit=limit * 3)
-        feed_source = "nzbgeek_new_movies"
+        feed_source = "nzbgeek_geekseek_new_movies"
 
         if not raw_movies:
             # Fallback to crawl if direct fetch fails
@@ -1423,7 +1813,7 @@ async def get_usenet_latest(
                 tmdb_api_key=settings.tmdb_api_key,
             )
 
-        # Enrich with posters from TMDB
+        # Enrich with posters - use NZBGeek cover first, then TMDB fallback
         enriched = []
         seen_titles = set()
         for r in raw_movies:
@@ -1440,11 +1830,13 @@ async def get_usenet_latest(
                 continue
             seen_titles.add(title_key)
 
-            poster_url = None
+            # Use cover from NZBGeek if available
+            poster_url = r.get("cover_url") or None
             overview = ""
+            imdb_id = r.get("imdb_id") or None
 
-            # Try to get poster from TMDB
-            if _poster_client and title:
+            # Fallback to TMDB if no cover from NZBGeek
+            if not poster_url and _poster_client and title:
                 try:
                     info = await _poster_client.lookup(title, year)
                     if info:
@@ -1463,6 +1855,8 @@ async def get_usenet_latest(
                 "source": "nzbgeek",
                 "pub_date": r.get("pub_date", ""),
                 "release_name": raw_title,
+                "imdb_id": imdb_id,
+                "link": r.get("link"),
             })
 
             if len(enriched) >= limit:
@@ -1487,6 +1881,94 @@ async def get_usenet_latest(
             "last_poll_at": last_poll_at,
             "poll_interval_minutes": settings.usenet_poll_interval_minutes,
         }
+
+
+@app.get("/api/usenet/check")
+async def check_usenet_availability(
+    title: str = Query(...),
+    year: int | None = Query(default=None),
+) -> dict:
+    """Check if a movie is available on NZBGeek/Usenet."""
+    api_key = settings.nzbgeek_api_key or ""
+    if not api_key and settings.nzbgeek_rss_url:
+        match = re.search(r'(?:apikey|r)=([^&]+)', settings.nzbgeek_rss_url)
+        if match:
+            api_key = match.group(1)
+
+    if not api_key:
+        return {"ok": False, "available": False, "message": "NZBGeek API key not configured"}
+
+    try:
+        import httpx
+
+        # Search NZBGeek for this movie
+        search_query = title
+        if year:
+            search_query = f"{title} {year}"
+
+        search_url = f"https://api.nzbgeek.info/api?t=search&cat=2000&q={quote(search_query)}&apikey={api_key}&o=json"
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(search_url)
+            if resp.status_code != 200:
+                return {"ok": False, "available": False, "message": f"NZBGeek returned {resp.status_code}"}
+
+            data = resp.json()
+            items = data.get("channel", {}).get("item", [])
+
+            # Check if any results match
+            if items:
+                # Return available with details
+                best_match = items[0] if isinstance(items, list) else items
+                return {
+                    "ok": True,
+                    "available": True,
+                    "result_count": len(items) if isinstance(items, list) else 1,
+                    "title": title,
+                    "year": year,
+                    "checked_at": datetime.now(UTC).isoformat(),
+                }
+            else:
+                return {
+                    "ok": True,
+                    "available": False,
+                    "result_count": 0,
+                    "title": title,
+                    "year": year,
+                    "checked_at": datetime.now(UTC).isoformat(),
+                }
+
+    except Exception as exc:
+        logger.warning(f"Error checking NZBGeek availability: {exc}")
+        return {"ok": False, "available": False, "message": str(exc)}
+
+
+@app.delete("/api/radarr/movie/{movie_id}")
+async def delete_radarr_movie(
+    movie_id: int,
+    delete_files: bool = Query(default=True),
+) -> dict:
+    """Delete a movie from Radarr."""
+    if not settings.radarr_base_url or not settings.radarr_api_key:
+        return {"ok": False, "message": "Radarr not configured"}
+
+    try:
+        import httpx
+
+        url = f"{settings.radarr_base_url.rstrip('/')}/api/v3/movie/{movie_id}"
+        params = {"deleteFiles": str(delete_files).lower(), "addImportExclusion": "false"}
+        headers = {"X-Api-Key": settings.radarr_api_key}
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.delete(url, params=params, headers=headers)
+            if resp.status_code in (200, 204):
+                return {"ok": True, "message": f"Movie {movie_id} deleted from Radarr"}
+            else:
+                return {"ok": False, "message": f"Radarr returned {resp.status_code}"}
+
+    except Exception as exc:
+        logger.warning(f"Error deleting from Radarr: {exc}")
+        return {"ok": False, "message": str(exc)}
 
 
 @app.get("/api/trailer")
@@ -1577,6 +2059,7 @@ async def get_radarr_monitored() -> dict:
 
             items.append({
                 "movie_id": m.get("id"),
+                "tmdb_id": m.get("tmdbId"),
                 "title": m.get("title"),
                 "year": m.get("year"),
                 "monitored": monitored,
@@ -2049,6 +2532,79 @@ async def plex_library(
 
     movies.sort(key=lambda row: (row["title"].lower(), row.get("year") or 0))
     return {"ok": True, "total": len(movies), "movies": movies[:limit]}
+
+
+class PlexWatchlistRequest(BaseModel):
+    title: str
+    year: int | None = None
+    tmdb_id: int | None = None
+    imdb_id: str | None = None
+
+
+@app.post("/api/plex/watchlist")
+async def add_to_plex_watchlist(req: PlexWatchlistRequest) -> dict:
+    """Add a movie to the Plex Watchlist."""
+    if not settings.plex_token:
+        return {"ok": False, "message": "PLEX_TOKEN not configured"}
+
+    import httpx
+
+    headers = {
+        "X-Plex-Token": settings.plex_token,
+        "X-Plex-Client-Identifier": "majic-movie-selector",
+        "Accept": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            # Try to find the movie on Plex Discover using TMDB ID
+            rating_key = None
+
+            if req.tmdb_id:
+                search_url = f"https://discover.provider.plex.tv/library/search?query=tmdb://{req.tmdb_id}&searchTypes=movie&limit=1"
+                resp = await client.get(search_url, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    results = data.get("MediaContainer", {}).get("Metadata", [])
+                    if results:
+                        rating_key = results[0].get("ratingKey")
+
+            # Fallback: search by title and year
+            if not rating_key:
+                query = req.title
+                if req.year:
+                    query = f"{req.title} {req.year}"
+                search_url = f"https://discover.provider.plex.tv/library/search?query={quote(query)}&searchTypes=movie&limit=5"
+                resp = await client.get(search_url, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    results = data.get("MediaContainer", {}).get("Metadata", [])
+                    for result in results:
+                        result_title = result.get("title", "").lower()
+                        result_year = result.get("year")
+                        if result_title == req.title.lower():
+                            if not req.year or result_year == req.year:
+                                rating_key = result.get("ratingKey")
+                                break
+                    # If no exact match, use first result
+                    if not rating_key and results:
+                        rating_key = results[0].get("ratingKey")
+
+            if not rating_key:
+                return {"ok": False, "message": f"Could not find '{req.title}' on Plex"}
+
+            # Add to watchlist
+            watchlist_url = f"https://discover.provider.plex.tv/actions/addToWatchlist?ratingKey={rating_key}"
+            resp = await client.put(watchlist_url, headers=headers)
+
+            if resp.status_code in (200, 201, 204):
+                return {"ok": True, "message": f"Added '{req.title}' to Plex Watchlist"}
+            else:
+                return {"ok": False, "message": f"Failed to add to watchlist: {resp.status_code}"}
+
+    except Exception as e:
+        logger.error(f"Error adding to Plex Watchlist: {e}")
+        return {"ok": False, "message": str(e)}
 
 
 class PlexStationStartRequest(BaseModel):
