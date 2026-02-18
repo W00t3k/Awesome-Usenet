@@ -18,16 +18,40 @@ class RogerEbertAgent(MovieAgent):
         self._allowed_years = {2025, 2026}
 
     async def collect(self, context: AgentContext) -> SourcePayload:
+        # Try RSS feed first (more reliable, not blocked by 403)
+        try:
+            rows = await self._client.reviews_from_rss(years=self._allowed_years)
+            if rows:
+                movies = self._to_candidates(rows, prefix="rogerebert")
+                return SourcePayload(
+                    movies=movies,
+                    metadata={
+                        "notes": (
+                            f"Fetched {len(movies)} RogerEbert reviews from RSS feed "
+                            f"(years: {', '.join(str(y) for y in sorted(self._allowed_years))})"
+                        )
+                    },
+                )
+        except Exception:  # noqa: BLE001
+            pass
+
+        # Fallback to web scraping if RSS fails
         if self._reviews_url:
             try:
-                rows = await self._client.recent_reviews(self._reviews_url, limit=40)
+                # Fetch ALL reviews for 2025-2026 by paginating
+                rows = await self._client.all_reviews_for_years(
+                    base_url=self._reviews_url,
+                    years=self._allowed_years,
+                    max_pages=25,  # Up to 25 pages to get all recent reviews
+                )
                 movies = self._to_candidates(rows, prefix="rogerebert")
                 return SourcePayload(
                     movies=movies,
                     metadata={
                         "notes": (
                             f"Fetched {len(movies)} RogerEbert reviews "
-                            f"(years: {', '.join(str(y) for y in sorted(self._allowed_years))})"
+                            f"(years: {', '.join(str(y) for y in sorted(self._allowed_years))}, "
+                            f"paginated)"
                         )
                     },
                 )
