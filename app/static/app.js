@@ -29,6 +29,11 @@ const searchResultsEl = document.getElementById("search-results");
 const nowDownloadingEl = document.getElementById("now-downloading");
 const sortSelect = document.getElementById("sort-select");
 const themeSelect = document.getElementById("theme-select");
+const customThemeBtn = document.getElementById("custom-theme-btn");
+const customThemeModal = document.getElementById("custom-theme-modal");
+const customThemeSaveBtn = document.getElementById("custom-theme-save");
+const customThemeResetBtn = document.getElementById("custom-theme-reset");
+const customThemeInputs = document.querySelectorAll("[data-theme-var]");
 const minScoreEl = document.getElementById("min-score");
 const yearFromEl = document.getElementById("year-from");
 const yearToEl = document.getElementById("year-to");
@@ -39,6 +44,7 @@ const modalPosterImg = document.getElementById("modal-poster-img");
 const modalTitle = document.getElementById("modal-title");
 const modalMeta = document.getElementById("modal-meta");
 const modalScore = document.getElementById("modal-score");
+const modalHighlightsEl = document.getElementById("modal-highlights");
 const modalOverview = document.getElementById("modal-overview");
 const modalSourceLinks = document.getElementById("modal-source-links");
 const modalEvidenceEl = document.getElementById("modal-evidence");
@@ -47,7 +53,6 @@ const modalDownloadBtn = document.getElementById("modal-download");
 const modalPlexWatchlistBtn = document.getElementById("modal-plex-watchlist");
 const modalCheckUsenetBtn = document.getElementById("modal-check-usenet");
 const modalDeleteBtn = document.getElementById("modal-delete");
-const modalSkipBtn = document.getElementById("modal-skip");
 
 // Login elements
 const loginModal = document.getElementById("login-modal");
@@ -72,10 +77,36 @@ let justAddedLastPollAt = null;
 let justAddedPollIntervalMinutes = null;
 let justAddedMetaTimer = null;
 let justAddedRefreshTimer = null;
+
+// Data Freshness elements
+const freshnessChip = document.getElementById("freshness-chip");
+const freshnessLabel = document.getElementById("freshness-label");
+const freshnessDropdown = document.getElementById("freshness-dropdown");
+const freshnessSources = document.getElementById("freshness-sources");
+const freshnessRefreshBtn = document.getElementById("freshness-refresh-btn");
+let freshnessData = null;
+let freshnessTimer = null;
+let lastDataFetchAt = null; // Track when we last fetched recommendations
 const THEME_KEY = "majic_theme";
+const CUSTOM_THEME_KEY = "majic_custom_theme";
+const CUSTOM_THEME_DEFAULTS = Object.freeze({
+  "--bg": "#0a0a0a",
+  "--bg-card": "#111111",
+  "--bg-hover": "#1a1a1a",
+  "--border": "#2a2a2a",
+  "--text": "#f0f0f0",
+  "--text-muted": "#888888",
+  "--primary": "#e50914",
+  "--primary-hover": "#ff4d57",
+  "--success": "#46d369",
+  "--warning": "#e5a00d",
+  "--danger": "#ff4d57",
+  "--accent": "#e50914",
+});
+const CUSTOM_THEME_VARS = Object.keys(CUSTOM_THEME_DEFAULTS);
 let downloadHistoryClearedAt = localStorage.getItem(DOWNLOAD_HISTORY_CLEAR_KEY);
 let currentRecommendations = [];
-let availabilityFilter = "all"; // all, ready, unreleased, unavailable
+let availabilityFilter = "unavailable"; // all, ready, unreleased, unavailable (default: Not Ready)
 let currentModalMovie = null;
 const RECOMMENDATION_BATCH_SIZE = 8;
 const RECOMMENDATION_OBSERVER_ROOT_MARGIN = "500px 0px";
@@ -103,16 +134,224 @@ let calendarItems = [];
 let filterDebounceTimer = null;
 const MAX_RECOMMENDATION_COUNT = 500;
 
+// Track posters being fetched to avoid duplicate requests
+const posterFetchInProgress = new Set();
+
+// API Stats tracking
+const apiStats = {
+  posterFetches: 0,
+  posterSuccesses: 0,
+  totalTime: 0,
+  inFlight: 0,
+};
+
+function updateApiStatsUI() {
+  const el = document.getElementById("api-stats");
+  const textEl = document.getElementById("api-stats-text");
+  if (!el || !textEl) return;
+
+  if (apiStats.inFlight > 0) {
+    el.hidden = false;
+    const avgTime = apiStats.posterFetches > 0 ? Math.round(apiStats.totalTime / apiStats.posterFetches) : 0;
+    textEl.innerHTML = `<span style="color:var(--accent)">●</span> ${apiStats.inFlight} fetching | ${apiStats.posterSuccesses}/${apiStats.posterFetches} posters | avg ${avgTime}ms`;
+  } else if (apiStats.posterFetches > 0) {
+    const avgTime = Math.round(apiStats.totalTime / apiStats.posterFetches);
+    const rate = Math.round((apiStats.posterSuccesses / apiStats.posterFetches) * 100);
+    textEl.textContent = `${apiStats.posterSuccesses}/${apiStats.posterFetches} posters (${rate}%) | avg ${avgTime}ms`;
+    // Hide after 5 seconds of inactivity
+    setTimeout(() => { if (apiStats.inFlight === 0) el.hidden = true; }, 5000);
+  } else {
+    el.hidden = true;
+  }
+}
+
+// Fetch poster dynamically for movies without one
+async function fetchPosterDynamic(movie, imageEl, cardNode = null) {
+  const key = `${movie.title}:${movie.year || ""}`;
+  if (posterFetchInProgress.has(key)) return;
+  posterFetchInProgress.add(key);
+  apiStats.inFlight++;
+  updateApiStatsUI();
+
+  const startTime = performance.now();
+  let success = false;
+  try {
+    const params = new URLSearchParams({ title: movie.title });
+    if (movie.year) params.set("year", movie.year);
+    const res = await fetch(`/api/poster?${params}`);
+    const data = await res.json();
+    apiStats.posterFetches++;
+    apiStats.totalTime += performance.now() - startTime;
+    if (data.ok && data.poster_url) {
+      apiStats.posterSuccesses++;
+      success = true;
+      // Update the image element
+      imageEl.src = data.poster_url;
+      // Also update the movie object for future renders
+      movie.poster_url = data.poster_url;
+      if (data.overview && !movie.overview) movie.overview = data.overview;
+      if (data.genres && !movie.genres?.length) movie.genres = data.genres;
+    }
+  } catch {
+    apiStats.posterFetches++;
+    apiStats.totalTime += performance.now() - startTime;
+  } finally {
+    posterFetchInProgress.delete(key);
+    apiStats.inFlight--;
+    updateApiStatsUI();
+    // Update poster status badge
+    if (cardNode) {
+      const badge = cardNode.querySelector(".poster-status");
+      if (badge) {
+        badge.classList.remove("fetching");
+        if (success) {
+          badge.classList.add("found");
+          badge.title = "Poster loaded";
+          // Hide after a moment since we have the poster
+          setTimeout(() => badge.remove(), 1500);
+        } else {
+          badge.classList.add("missing");
+          badge.title = "No poster found";
+        }
+      }
+    }
+  }
+}
+
 // Theme handling
+function normalizeHexColor(value, fallback) {
+  const raw = String(value || "").trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw.toLowerCase();
+  if (/^#[0-9a-fA-F]{3}$/.test(raw)) {
+    return `#${raw[1]}${raw[1]}${raw[2]}${raw[2]}${raw[3]}${raw[3]}`.toLowerCase();
+  }
+  return fallback;
+}
+
+function sanitizeCustomThemeConfig(input) {
+  const source = (input && typeof input === "object") ? input : {};
+  const safe = {};
+  CUSTOM_THEME_VARS.forEach((varName) => {
+    safe[varName] = normalizeHexColor(source[varName], CUSTOM_THEME_DEFAULTS[varName]);
+  });
+  return safe;
+}
+
+function loadCustomThemeConfig() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_THEME_KEY);
+    if (!raw) return { ...CUSTOM_THEME_DEFAULTS };
+    return sanitizeCustomThemeConfig(JSON.parse(raw));
+  } catch {
+    return { ...CUSTOM_THEME_DEFAULTS };
+  }
+}
+
+function saveCustomThemeConfig(config) {
+  const safe = sanitizeCustomThemeConfig(config);
+  localStorage.setItem(CUSTOM_THEME_KEY, JSON.stringify(safe));
+  return safe;
+}
+
+function clearCustomThemeVars() {
+  CUSTOM_THEME_VARS.forEach((varName) => {
+    document.documentElement.style.removeProperty(varName);
+  });
+}
+
+function applyCustomTheme(config) {
+  const safe = sanitizeCustomThemeConfig(config);
+  CUSTOM_THEME_VARS.forEach((varName) => {
+    document.documentElement.style.setProperty(varName, safe[varName]);
+  });
+}
+
+function setTheme(theme, persist = true) {
+  const availableThemes = themeSelect
+    ? new Set(Array.from(themeSelect.options).map((opt) => opt.value))
+    : null;
+  const nextTheme = (availableThemes && availableThemes.has(theme)) ? theme : "dark";
+
+  document.documentElement.setAttribute("data-theme", nextTheme);
+  if (nextTheme === "custom") {
+    applyCustomTheme(loadCustomThemeConfig());
+  } else {
+    clearCustomThemeVars();
+  }
+
+  if (themeSelect) themeSelect.value = nextTheme;
+  if (persist) localStorage.setItem(THEME_KEY, nextTheme);
+}
+
+function customThemeFromInputs() {
+  const payload = {};
+  customThemeInputs.forEach((input) => {
+    const varName = input.dataset.themeVar;
+    if (!varName || !(varName in CUSTOM_THEME_DEFAULTS)) return;
+    payload[varName] = normalizeHexColor(input.value, CUSTOM_THEME_DEFAULTS[varName]);
+  });
+  return sanitizeCustomThemeConfig(payload);
+}
+
+function setCustomThemeInputs(config) {
+  const safe = sanitizeCustomThemeConfig(config);
+  customThemeInputs.forEach((input) => {
+    const varName = input.dataset.themeVar;
+    if (!varName || !(varName in safe)) return;
+    input.value = safe[varName];
+  });
+}
+
+function initCustomThemeEditor() {
+  if (!customThemeModal || !customThemeInputs.length) return;
+
+  const closeBtn = customThemeModal.querySelector(".modal-close");
+  const backdrop = customThemeModal.querySelector(".modal-backdrop");
+  if (closeBtn) closeBtn.addEventListener("click", () => hideModal(customThemeModal));
+  if (backdrop) backdrop.addEventListener("click", () => hideModal(customThemeModal));
+
+  if (customThemeBtn) {
+    customThemeBtn.addEventListener("click", () => {
+      setCustomThemeInputs(loadCustomThemeConfig());
+      showModal(customThemeModal);
+    });
+  }
+
+  customThemeInputs.forEach((input) => {
+    input.addEventListener("input", () => {
+      const activeTheme = localStorage.getItem(THEME_KEY) || "dark";
+      if (activeTheme !== "custom") return;
+      applyCustomTheme(customThemeFromInputs());
+    });
+  });
+
+  if (customThemeResetBtn) {
+    customThemeResetBtn.addEventListener("click", () => {
+      const defaults = { ...CUSTOM_THEME_DEFAULTS };
+      setCustomThemeInputs(defaults);
+      saveCustomThemeConfig(defaults);
+      if ((localStorage.getItem(THEME_KEY) || "dark") === "custom") {
+        applyCustomTheme(defaults);
+      }
+    });
+  }
+
+  if (customThemeSaveBtn) {
+    customThemeSaveBtn.addEventListener("click", () => {
+      const custom = saveCustomThemeConfig(customThemeFromInputs());
+      applyCustomTheme(custom);
+      setTheme("custom");
+      hideModal(customThemeModal);
+    });
+  }
+}
+
 function initTheme() {
   const saved = localStorage.getItem(THEME_KEY) || "dark";
-  document.documentElement.setAttribute("data-theme", saved);
+  setTheme(saved, false);
   if (themeSelect) {
-    themeSelect.value = saved;
     themeSelect.addEventListener("change", () => {
-      const theme = themeSelect.value;
-      document.documentElement.setAttribute("data-theme", theme);
-      localStorage.setItem(THEME_KEY, theme);
+      setTheme(themeSelect.value, true);
     });
   }
 }
@@ -207,7 +446,7 @@ function canonicalSourceKey(raw) {
   if (value === "plex") return "plex";
   if (value === "radarr") return "radarr";
   if (value === "oscars") return "oscars";
-  if (value === "criterion") return "criterion";
+  if (value === "criterion" || value === "criterion-release") return "criterion";
   // New agent sources
   if (value === "imdb_top250") return "imdb_top250";
   if (value === "a24") return "a24";
@@ -445,7 +684,6 @@ function sourceOriginText(movie) {
     "drunkenslug",
     "nzbgeek",
     "releases",
-    "upcoming",
     "plex",
     "radarr",
   ];
@@ -463,15 +701,20 @@ function sourceOriginText(movie) {
 }
 
 function frontSourceOriginText(movie) {
-  const origin = sourceOriginText(movie);
-  if (!origin) return null;
-  // Filter out generic/uninformative sources
-  const genericSources = ["TMDB", "UPCOMING", "NOW PLAYING", "RELEASES"];
-  const filtered = origin
-    .split("·")
-    .map((part) => part.trim())
-    .filter((part) => part && !genericSources.includes(part.toUpperCase()));
-  return filtered.length ? filtered.join(" · ") : null;
+  if (!movie) return null;
+  const keys = sourceKeysFromMovie(movie);
+  const awardBadges = [
+    { key: "oscars", label: "Oscar Winner" },
+    { key: "bafta", label: "BAFTA Winner" },
+    { key: "golden_globes", label: "Golden Globe Winner" },
+    { key: "cannes", label: "Cannes Winner" },
+    { key: "sundance", label: "Sundance Winner" },
+  ];
+  const labels = awardBadges
+    .filter((item) => keys.has(item.key))
+    .map((item) => item.label);
+  if (!labels.length) return null;
+  return labels.slice(0, 2).join(" · ");
 }
 
 function sourceAttributionText(movie) {
@@ -482,7 +725,6 @@ function sourceAttributionText(movie) {
     "nzbgeek",
     "releases",
     "tmdb",
-    "upcoming",
     "rt",
     "rogerebert",
     "oscars",
@@ -505,16 +747,69 @@ function sourceAttributionText(movie) {
   return fallbackLabels.length ? fallbackLabels.join(" / ") : null;
 }
 
+function movieHighlightLabels(movie) {
+  if (!movie) return [];
+  const keys = sourceKeysFromMovie(movie);
+  const labels = [];
+  const add = (label) => {
+    const text = String(label || "").trim();
+    if (!text) return;
+    if (!labels.includes(text)) labels.push(text);
+  };
+
+  if (movie.best_picture || keys.has("best-picture-winner")) add("Oscar: Best Picture");
+  if (movie.best_actor || keys.has("best-actor-winner")) add("Oscar: Best Actor");
+  if (keys.has("best-picture-nominee")) add("Oscar Nominee");
+  if (keys.has("oscars")) add("Oscars");
+  if (keys.has("criterion")) add("Criterion Collection");
+  if (keys.has("bafta")) add("BAFTA Winner");
+  if (keys.has("golden_globes")) add("Golden Globe Winner");
+  if (keys.has("cannes")) add("Cannes Winner");
+  if (keys.has("sundance")) add("Sundance Winner");
+
+  if (Array.isArray(movie.award_labels)) {
+    movie.award_labels.forEach((label) => add(label));
+  }
+
+  return labels.slice(0, 8);
+}
+
 function evidenceItems(movie) {
   const raw = Array.isArray(movie?.evidence) ? movie.evidence : [];
   const cleaned = raw
-    .map((row) => String(row || "").trim())
+    .map((row) => compactEvidenceLine(row))
     .filter(Boolean)
-    .map((row) => row.replace(/\s+/g, " "));
   const unique = [...new Set(cleaned)];
   if (unique.length) return unique;
   const source = sourceAttributionText(movie);
   return source ? [`Aggregated from ${source}`] : [];
+}
+
+function compactEvidenceLine(input) {
+  let line = String(input || "").replace(/\s+/g, " ").trim();
+  if (!line) return "";
+
+  if (/^DrunkenSlug item:\s*https?:\/\/\S+$/i.test(line)) {
+    return "DrunkenSlug index listing";
+  }
+  if (/^NZBGeek (?:RSS )?item(?: date)?:\s*/i.test(line)) {
+    return line.replace(/^NZBGeek (?:RSS )?item(?: date)?:\s*/i, "NZBGeek: ");
+  }
+
+  line = line.replace(/https?:\/\/[^\s)]+/gi, (url) => {
+    try {
+      const host = new URL(url).hostname.replace(/^www\./, "");
+      return host || "link";
+    } catch {
+      return "link";
+    }
+  });
+
+  const maxChars = 260;
+  if (line.length > maxChars) {
+    line = `${line.slice(0, maxChars - 1).trimEnd()}…`;
+  }
+  return line;
 }
 
 function titleWithSource(movie) {
@@ -604,16 +899,34 @@ function activeCalendarSourceFilter() {
 }
 
 function criticLabel(movie) {
-  if (Number.isFinite(movie.rottentomatoes_score)) {
-    return `RT ${Math.round(movie.rottentomatoes_score)}%`;
-  }
-  if (Number.isFinite(movie.rogerebert_score)) {
-    const score = Number(movie.rogerebert_score);
-    if (score <= 4) return `Ebert ${score.toFixed(1)}/4`;
-    if (score <= 5) return `Ebert ${score.toFixed(1)}/5`;
-    return `Ebert ${score.toFixed(0)}`;
+  const rt = Number(movie?.rottentomatoes_score);
+  if (Number.isFinite(rt) && rt > 0) {
+    return `RT ${Math.round(rt)}%`;
   }
   return null;
+}
+
+function toPositiveNumber(value) {
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 ? num : null;
+}
+
+function agentScoreToPercent(movie) {
+  const rt = toPositiveNumber(movie?.rottentomatoes_score);
+  if (rt != null) return Math.max(1, Math.min(99, Math.round(rt)));
+
+  const ebert = toPositiveNumber(movie?.rogerebert_score);
+  if (ebert == null) return null;
+  if (ebert <= 4) return Math.max(1, Math.min(99, Math.round((ebert / 4) * 100)));
+  if (ebert <= 5) return Math.max(1, Math.min(99, Math.round((ebert / 5) * 100)));
+  return Math.max(1, Math.min(99, Math.round(ebert)));
+}
+
+function displayScoreValue(rec) {
+  const rt = toPositiveNumber(rec?.movie?.rottentomatoes_score);
+  if (rt == null) return null;
+  const rounded = Math.round(rt);
+  return rounded > 0 ? rounded : null;
 }
 
 function parseMovieReleaseDate(movie) {
@@ -633,9 +946,140 @@ function movieReleaseSortValue(movie) {
 }
 
 function releaseDateChip(movie) {
-  const dt = parseMovieReleaseDate(movie);
-  if (!dt) return null;
-  return `Release ${dt.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+  const rows = movieDateRows(movie);
+  const official = rows.find((row) => row.label === "Official");
+  return official ? `Official ${official.value}` : null;
+}
+
+function parseDateValue(raw) {
+  const value = String(raw || "").replace(/\u2026+$/, "").trim();
+  if (!value) return null;
+
+  const isoMatch = value.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+  if (isoMatch) {
+    const dt = new Date(`${isoMatch[1]}T00:00:00`);
+    if (!Number.isNaN(dt.getTime())) return dt;
+  }
+
+  const ts = Date.parse(value);
+  if (Number.isNaN(ts)) return null;
+  const dt = new Date(ts);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+function formatCardDate(dt) {
+  if (!(dt instanceof Date) || Number.isNaN(dt.getTime())) return null;
+  return dt.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function moreRecentDateValue(currentRaw, nextRaw) {
+  const next = String(nextRaw || "").trim();
+  if (!next) return currentRaw || null;
+  const current = String(currentRaw || "").trim();
+  if (!current) return next;
+  const currentDate = parseDateValue(current);
+  const nextDate = parseDateValue(next);
+  if (!nextDate) return current;
+  if (!currentDate || nextDate.getTime() > currentDate.getTime()) {
+    return next;
+  }
+  return current;
+}
+
+function extractUsenetFoundDates(evidence) {
+  const lines = Array.isArray(evidence) ? evidence : [];
+  let drunkenslug = null;
+  let nzbgeek = null;
+
+  lines.forEach((line) => {
+    const text = String(line || "").trim();
+    if (!text) return;
+
+    let match = text.match(/^DrunkenSlug item date:\s*(.+)$/i);
+    if (match) {
+      drunkenslug = moreRecentDateValue(drunkenslug, match[1]);
+      return;
+    }
+
+    match = text.match(/^NZBGeek (?:RSS )?item(?: date)?:\s*(.+)$/i);
+    if (match) {
+      nzbgeek = moreRecentDateValue(nzbgeek, match[1]);
+    }
+  });
+
+  return { drunkenslug, nzbgeek };
+}
+
+function movieDateRows(movie) {
+  const rowsByLabel = new Map();
+
+  function addDate(label, raw, priority = 50) {
+    const dt = parseDateValue(raw);
+    if (!dt) return;
+    const candidate = {
+      label,
+      value: formatCardDate(dt) || dt.toISOString().slice(0, 10),
+      priority,
+      time: dt.getTime(),
+    };
+    const existing = rowsByLabel.get(label);
+    if (
+      !existing
+      || candidate.priority < existing.priority
+      || (candidate.priority === existing.priority && candidate.time > existing.time)
+    ) {
+      rowsByLabel.set(label, candidate);
+    }
+  }
+
+  if (movie?.official_release_date) addDate("Official", movie.official_release_date, 8);
+  if (movie?.release_date) addDate("Official", movie.release_date, 10);
+  if (movie?.drunkenslug_found_at) addDate("DS Found", movie.drunkenslug_found_at, 28);
+  if (movie?.nzbgeek_found_at) addDate("NZBGeek Found", movie.nzbgeek_found_at, 29);
+  if (movie?.pub_date) addDate("NZBGeek Found", movie.pub_date, 29);
+
+  const evidence = Array.isArray(movie?.evidence) ? movie.evidence : [];
+  const usenetFound = extractUsenetFoundDates(evidence);
+  if (usenetFound.drunkenslug) addDate("DS Found", usenetFound.drunkenslug, 30);
+  if (usenetFound.nzbgeek) addDate("NZBGeek Found", usenetFound.nzbgeek, 31);
+
+  evidence.forEach((line) => {
+    const text = String(line || "").trim();
+    if (!text) return;
+
+    let match = text.match(/^Official release(?: date)?:\s*(.+)$/i);
+    if (match) {
+      addDate("Official", match[1], 9);
+      return;
+    }
+
+    match = text.match(/^Releases\.com upcoming date:\s*(.+)$/i);
+    if (match) {
+      addDate("Releases", match[1], 20);
+      return;
+    }
+
+    match = text.match(/^Upcoming release:\s*(.+)$/i);
+    if (match) {
+      addDate("Upcoming", match[1], 21);
+    }
+  });
+
+  const rows = [...rowsByLabel.values()];
+  rows.sort((a, b) => a.priority - b.priority || b.time - a.time);
+  return rows.slice(0, 6);
+}
+
+function isDateEvidenceLine(line) {
+  const text = String(line || "").trim();
+  if (!text) return false;
+  return (
+    /^Official release(?: date)?:\s*/i.test(text)
+    || /^Releases\.com upcoming date:\s*/i.test(text)
+    || /^Upcoming release:\s*/i.test(text)
+    || /^DrunkenSlug item date:\s*/i.test(text)
+    || /^NZBGeek (?:RSS )?item(?: date)?:\s*/i.test(text)
+  );
 }
 
 function isUpcomingRelease(movie) {
@@ -1073,6 +1517,90 @@ async function loadRadarrMonitored() {
 }
 
 let currentSwarmAgents = [];
+let agentStreamSource = null;
+
+// Subscribe to SSE stream for real-time agent updates
+function startAgentStream(userId, count) {
+  // Close existing connection
+  if (agentStreamSource) {
+    agentStreamSource.close();
+  }
+
+  const statsEl = document.getElementById("api-stats");
+  const statsTextEl = document.getElementById("api-stats-text");
+  let agentsCompleted = 0;
+  let totalMovies = 0;
+
+  try {
+    agentStreamSource = new EventSource(`/api/recommendations/stream?user_id=${userId}&count=${count}`);
+
+    agentStreamSource.addEventListener("agent", (e) => {
+      const data = JSON.parse(e.data);
+      agentsCompleted++;
+      totalMovies += data.movies || 0;
+
+      // Update stats display
+      if (statsEl && statsTextEl) {
+        statsEl.hidden = false;
+        const status = data.status === "cached" ? "●" : data.status === "complete" ? "●" : "○";
+        const color = data.status === "cached" ? "var(--text-muted)" : data.status === "complete" ? "var(--success)" : "var(--warning)";
+        statsTextEl.innerHTML = `<span style="color:${color}">${status}</span> ${data.agent}: ${data.movies} movies ${data.elapsed_ms ? `(${data.elapsed_ms}ms)` : "(cached)"} | Total: ${totalMovies}`;
+      }
+
+      // Update swarm visualization with new agent
+      updateSwarmAgent(data);
+    });
+
+    agentStreamSource.addEventListener("complete", () => {
+      if (statsEl && statsTextEl) {
+        statsTextEl.innerHTML = `<span style="color:var(--success)">●</span> All agents complete | ${totalMovies} movies`;
+        setTimeout(() => { if (apiStats.inFlight === 0) statsEl.hidden = true; }, 3000);
+      }
+      agentStreamSource.close();
+      agentStreamSource = null;
+    });
+
+    agentStreamSource.onerror = () => {
+      agentStreamSource.close();
+      agentStreamSource = null;
+    };
+  } catch (err) {
+    console.error("SSE stream error:", err);
+  }
+}
+
+// Update a single agent in the swarm visualization
+function updateSwarmAgent(agentData) {
+  const previewEl = document.getElementById("swarm-preview");
+  if (!previewEl) return;
+
+  // Find existing dot or create new one
+  let dot = previewEl.querySelector(`[data-agent="${agentData.agent}"]`);
+  if (!dot) {
+    dot = document.createElement("div");
+    dot.className = "agent-dot";
+    dot.dataset.agent = agentData.agent;
+    previewEl.appendChild(dot);
+  }
+
+  // Update status
+  dot.classList.remove("success", "cached", "error", "pending");
+  if (agentData.status === "complete") {
+    dot.classList.add("success");
+  } else if (agentData.status === "cached") {
+    dot.classList.add("cached");
+  } else {
+    dot.classList.add("error");
+  }
+  dot.title = `${agentData.agent}: ${agentData.movies} movies`;
+
+  // Update count
+  const countEl = document.getElementById("swarm-count");
+  if (countEl) {
+    const currentCount = parseInt(countEl.textContent) || 0;
+    countEl.textContent = currentCount + 1;
+  }
+}
 
 function renderSwarm(agents) {
   currentSwarmAgents = agents || [];
@@ -1085,14 +1613,14 @@ function renderSwarm(agents) {
 
   if (previewEl) {
     previewEl.innerHTML = agents.map(a => {
-      const cls = a.status === "success" ? "success" : a.status === "skipped" ? "skipped" : "error";
+      const cls = (a.status === "success" || a.status === "cached") ? "success" : a.status === "skipped" ? "skipped" : "error";
       return `<div class="agent-dot ${cls}" title="${a.agent}"></div>`;
     }).join("");
   }
 
   // Update stats in modal
-  const successCount = agents.filter(a => a.status === "success").length;
-  const errorCount = agents.filter(a => a.status !== "success" && a.status !== "skipped").length;
+  const successCount = agents.filter(a => a.status === "success" || a.status === "cached").length;
+  const errorCount = agents.filter(a => a.status !== "success" && a.status !== "cached" && a.status !== "skipped").length;
 
   const successEl = document.getElementById("swarm-success-count");
   const errorEl = document.getElementById("swarm-error-count");
@@ -1166,7 +1694,7 @@ function renderSwarmVisualization(agents) {
     const x = center.x + r * Math.cos(angle);
     const y = center.y + r * Math.sin(angle);
 
-    const color = agent.status === "success" ? "#27d4a2" : agent.status === "skipped" ? "#f5ba53" : "#ff6f71";
+    const color = (agent.status === "success" || agent.status === "cached") ? "#27d4a2" : agent.status === "skipped" ? "#f5ba53" : "#ff6f71";
 
     swarmMap.appendChild(svg("line", {
       x1: center.x, y1: center.y, x2: x, y2: y,
@@ -1206,7 +1734,7 @@ function renderSwarmVisualization(agents) {
     const x = center.x + r * Math.cos(angle);
     const y = center.y + r * Math.sin(angle);
 
-    const color = agent.status === "success" ? "#27d4a2" : agent.status === "skipped" ? "#f5ba53" : "#ff6f71";
+    const color = (agent.status === "success" || agent.status === "cached") ? "#27d4a2" : agent.status === "skipped" ? "#f5ba53" : "#ff6f71";
     const nodeSize = 22 - ringIndex * 2;
 
     // Glow (non-interactive)
@@ -1316,7 +1844,7 @@ function renderSwarmAgentList(agents) {
   if (!agentLog) return;
 
   agentLog.innerHTML = agents.map(agent => {
-    const cls = agent.status === "success" ? "success" : agent.status === "skipped" ? "skipped" : "error";
+    const cls = (agent.status === "success" || agent.status === "cached") ? "success" : agent.status === "skipped" ? "skipped" : "error";
     const clickable = agent.item_count > 0 ? "clickable" : "";
     return `
       <div class="agent-list-item ${clickable}" data-agent="${agent.agent}" title="Click to show ${agent.item_count} movies from ${agent.agent}">
@@ -1407,6 +1935,9 @@ function generatedPosterDataUrl(movie) {
 
 function sourceIcons(movie) {
   const tags = new Set(movie.source_tags || []);
+  const canonicalTags = new Set(
+    [...tags].map((tag) => canonicalSourceKey(tag)).filter(Boolean)
+  );
   const icons = [];
 
   // Agent/Curated source badges - these are the primary sources
@@ -1444,15 +1975,17 @@ function sourceIcons(movie) {
 
   // Add agent badges first (most important)
   for (const badge of agentBadges) {
-    if (tags.has(badge.tag)) {
+    if (tags.has(badge.tag) || canonicalTags.has(badge.tag)) {
       icons.push({ cls: badge.cls, label: badge.label, text: badge.text });
     }
   }
 
   // Then add availability/platform badges
-  const hasRt = Number.isFinite(movie.rottentomatoes_score) || tags.has("rottentomatoes") || [...tags].some((t) => t.startsWith("rt-"));
+  const rtScore = Number(movie?.rottentomatoes_score);
+  const hasRtTag = tags.has("rottentomatoes") || [...tags].some((t) => String(t).startsWith("rt-"));
+  const hasRt = (Number.isFinite(rtScore) && rtScore > 0) || hasRtTag;
   if (hasRt && icons.length < 4) {
-    const rtLabel = Number.isFinite(movie.rottentomatoes_score) ? `${Math.round(movie.rottentomatoes_score)}` : "RT";
+    const rtLabel = Number.isFinite(rtScore) && rtScore > 0 ? `${Math.round(rtScore)}` : "RT";
     icons.push({ cls: "rt", label: "Rotten Tomatoes", text: rtLabel });
   }
   if (tags.has("rogerebert") && icons.length < 4) icons.push({ cls: "rogerebert", label: "RogerEbert", text: "RE" });
@@ -1558,7 +2091,12 @@ function renderHeroMovie(rec) {
 
   const scoreEl = document.createElement("div");
   scoreEl.className = "score-badge large";
-  scoreEl.textContent = `${Math.round(rec.score)}`;
+  const heroScore = displayScoreValue(rec);
+  if (heroScore != null) {
+    scoreEl.textContent = `${heroScore}`;
+  } else {
+    scoreEl.style.display = "none";
+  }
 
   const summary = document.createElement("p");
   summary.className = "overview";
@@ -1628,20 +2166,6 @@ function renderHeroMovie(rec) {
     }
   });
 
-  const skipBtn = document.createElement("button");
-  skipBtn.className = "btn btn-ghost";
-  skipBtn.textContent = "Skip";
-  skipBtn.addEventListener("click", async () => {
-    if (skipBtn.disabled) return;
-    skipBtn.disabled = true;
-    try {
-      await sendFeedback(movie, false);
-      skipBtn.textContent = "Skipped";
-    } catch (err) {
-      skipBtn.textContent = "Error";
-    }
-  });
-
   const explainBtn = document.createElement("button");
   explainBtn.className = "btn btn-ghost";
   explainBtn.textContent = "Why this?";
@@ -1666,7 +2190,6 @@ function renderHeroMovie(rec) {
   actions.appendChild(likeBtn);
   actions.appendChild(dlBtn);
   actions.appendChild(explainBtn);
-  actions.appendChild(skipBtn);
 
   info.appendChild(title);
   info.appendChild(meta);
@@ -1798,13 +2321,6 @@ function getSourceLinks(movie) {
     cls: "imdb",
   });
 
-  // TMDB
-  links.push({
-    label: "TMDB",
-    url: `https://www.themoviedb.org/search?query=${title}`,
-    cls: "tmdb",
-  });
-
   // Letterboxd
   links.push({
     label: "Letterboxd",
@@ -1834,12 +2350,11 @@ async function loadTrailerEmbed(container, movie) {
     if (movie.year) params.set("year", String(movie.year));
     const res = await fetch(`/api/trailer?${params}`);
     const data = await res.json();
+    const fallbackUrl = getTrailerSearchUrl(movie);
     if (data.ok && data.video_key) {
       const url = `https://www.youtube.com/watch?v=${data.video_key}`;
-      const thumb = `https://img.youtube.com/vi/${data.video_key}/hqdefault.jpg`;
-      container.innerHTML = `<a class="trailer-thumb" href="${url}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()"><img src="${thumb}" alt="Trailer" /><span class="trailer-play-icon">▶</span></a>`;
+      container.innerHTML = `<a class="trailer-fallback" href="${url}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">▶ Watch Trailer</a>`;
     } else {
-      const fallbackUrl = getTrailerSearchUrl(movie);
       container.innerHTML = `<a class="trailer-fallback" href="${fallbackUrl}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">▶ Search Trailer</a>`;
     }
   } catch {
@@ -1873,9 +2388,15 @@ function openMovieModal(rec) {
   // Set meta
   if (modalMeta) {
     const critic = criticLabel(movie);
+    const dateRows = movieDateRows(movie);
+    const official = dateRows.find((row) => row.label === "Official");
+    const dsFound = dateRows.find((row) => row.label === "DS Found");
+    const nzbFound = dateRows.find((row) => row.label === "NZBGeek Found");
     modalMeta.textContent = [
       movie.year,
-      movie.release_date ? `Release: ${movie.release_date}` : null,
+      official ? `Official: ${official.value}` : null,
+      dsFound ? `DS found: ${dsFound.value}` : null,
+      nzbFound ? `NZBGeek found: ${nzbFound.value}` : null,
       critic,
       (movie.genres || []).slice(0, 3).join(", "),
     ].filter(Boolean).join(" • ");
@@ -1883,7 +2404,26 @@ function openMovieModal(rec) {
 
   // Set score
   if (modalScore) {
-    modalScore.textContent = `${Math.round(rec.score)}`;
+    const modalScoreValue = displayScoreValue(rec);
+    if (modalScoreValue != null) {
+      modalScore.textContent = `${modalScoreValue}`;
+      modalScore.style.display = "";
+    } else {
+      modalScore.textContent = "";
+      modalScore.style.display = "none";
+    }
+  }
+
+  if (modalHighlightsEl) {
+    modalHighlightsEl.innerHTML = "";
+    const labels = movieHighlightLabels(movie);
+    labels.forEach((label) => {
+      const chip = document.createElement("span");
+      chip.className = "modal-highlight-chip";
+      chip.textContent = label;
+      modalHighlightsEl.appendChild(chip);
+    });
+    modalHighlightsEl.style.display = labels.length ? "flex" : "none";
   }
 
   // Set overview
@@ -1958,22 +2498,6 @@ function openMovieModal(rec) {
     };
   }
 
-  if (modalSkipBtn) {
-    modalSkipBtn.disabled = false;
-    modalSkipBtn.textContent = "Skip";
-    modalSkipBtn.onclick = async () => {
-      if (modalSkipBtn.disabled) return;
-      modalSkipBtn.disabled = true;
-      try {
-        await sendFeedback(movie, false);
-        modalSkipBtn.textContent = "Skipped";
-        closeMovieModal();
-      } catch (err) {
-        modalSkipBtn.textContent = "Error";
-      }
-    };
-  }
-
   if (modalPlexWatchlistBtn) {
     modalPlexWatchlistBtn.disabled = false;
     modalPlexWatchlistBtn.textContent = "+ Plex Watchlist";
@@ -2016,12 +2540,25 @@ function openMovieModal(rec) {
   if (modalCheckUsenetBtn) {
     modalCheckUsenetBtn.disabled = false;
     modalCheckUsenetBtn.textContent = "🔍 Check Usenet";
+    modalCheckUsenetBtn.classList.remove("btn-success", "btn-danger");
     modalCheckUsenetBtn.onclick = async () => {
       if (modalCheckUsenetBtn.disabled) return;
+      const movieTitle = String(movie.title || "").trim();
+      if (!movieTitle) {
+        modalCheckUsenetBtn.textContent = "Missing title";
+        setTimeout(() => {
+          modalCheckUsenetBtn.textContent = "🔍 Check Usenet";
+          modalCheckUsenetBtn.disabled = false;
+        }, 1500);
+        return;
+      }
+
       modalCheckUsenetBtn.disabled = true;
       modalCheckUsenetBtn.textContent = "Checking...";
+      modalCheckUsenetBtn.classList.remove("btn-success", "btn-danger");
       try {
-        const url = `/api/usenet/check?title=${encodeURIComponent(movie.title)}${movie.year ? `&year=${movie.year}` : ''}`;
+        const yearParam = Number.isFinite(Number(movie.year)) ? `&year=${movie.year}` : "";
+        const url = `/api/usenet/check?title=${encodeURIComponent(movieTitle)}${yearParam}`;
         const res = await fetch(url);
         const data = await res.json();
         if (data.ok && data.available) {
@@ -2031,20 +2568,18 @@ function openMovieModal(rec) {
           movie.available_on_usenet = true;
         } else if (data.ok) {
           modalCheckUsenetBtn.textContent = "✗ Not on Usenet";
+          modalCheckUsenetBtn.classList.add("btn-danger");
         } else {
           modalCheckUsenetBtn.textContent = data.message || "Check failed";
-          setTimeout(() => {
-            modalCheckUsenetBtn.textContent = "🔍 Check Usenet";
-            modalCheckUsenetBtn.disabled = false;
-          }, 2000);
         }
       } catch (err) {
         modalCheckUsenetBtn.textContent = "Error";
-        setTimeout(() => {
-          modalCheckUsenetBtn.textContent = "🔍 Check Usenet";
-          modalCheckUsenetBtn.disabled = false;
-        }, 2000);
       }
+
+      setTimeout(() => {
+        modalCheckUsenetBtn.textContent = "🔍 Check Usenet";
+        modalCheckUsenetBtn.disabled = false;
+      }, 1800);
     };
   }
 
@@ -2170,7 +2705,8 @@ function buildRecommendationCardNode(rec, index) {
   const genreText = (movie.genres || []).slice(0, 3).join(", ");
   const frontMetaText = [movie.year || "Year unknown", release, genreText || null].filter(Boolean).join(" \u2022 ");
   const backMetaText = [movie.year || "Year unknown", release, genreText || null, critic].filter(Boolean).join(" \u2022 ");
-  const scoreText = `${Math.round(rec.score)}`;
+  const scoreValue = displayScoreValue(rec);
+  const scoreText = scoreValue != null ? `${scoreValue}` : null;
 
   // --- Front ---
   const frontTitle = node.querySelector(".flip-front-title");
@@ -2178,21 +2714,31 @@ function buildRecommendationCardNode(rec, index) {
 
   const frontMeta = node.querySelector(".flip-front-meta");
   if (frontMeta) frontMeta.textContent = frontMetaText;
-  const originText = frontSourceOriginText(movie);
+  const frontAwardText = frontSourceOriginText(movie);
 
   const frontOriginEl = node.querySelector(".front-source-origin");
   if (frontOriginEl) {
-    if (originText) {
-      frontOriginEl.textContent = `From ${originText}`;
+    if (frontAwardText) {
+      frontOriginEl.textContent = frontAwardText;
+      frontOriginEl.classList.add("award-chip");
       frontOriginEl.style.display = "inline-flex";
     } else {
       frontOriginEl.textContent = "";
+      frontOriginEl.classList.remove("award-chip");
       frontOriginEl.style.display = "none";
     }
   }
 
   const frontScore = node.querySelector(".flip-front-score");
-  if (frontScore) frontScore.textContent = scoreText;
+  if (frontScore) {
+    if (scoreText) {
+      frontScore.textContent = scoreText;
+      frontScore.style.display = "";
+    } else {
+      frontScore.textContent = "";
+      frontScore.style.display = "none";
+    }
+  }
 
   // Poster image
   const imageEl = node.querySelector(".cover-image");
@@ -2212,9 +2758,21 @@ function buildRecommendationCardNode(rec, index) {
       imageEl.src = generatedPosterDataUrl(movie);
     };
   } else if (imageEl) {
+    // No poster - use placeholder and fetch dynamically
     imageEl.src = generatedPosterDataUrl(movie);
     imageEl.style.display = "block";
     if (fallbackEl) fallbackEl.style.display = "none";
+    // Add poster loading indicator
+    const frontEl = node.querySelector(".flip-card-front");
+    if (frontEl) {
+      const posterBadge = document.createElement("div");
+      posterBadge.className = "poster-status fetching";
+      posterBadge.innerHTML = '<span class="poster-dot"></span>';
+      posterBadge.title = "Fetching poster...";
+      frontEl.appendChild(posterBadge);
+    }
+    // Fetch poster on-demand
+    fetchPosterDynamic(movie, imageEl, node);
   }
 
   // --- Download Status Badge ---
@@ -2247,7 +2805,15 @@ function buildRecommendationCardNode(rec, index) {
   });
 
   const backScore = node.querySelector(".back-score");
-  if (backScore) backScore.textContent = scoreText;
+  if (backScore) {
+    if (scoreText) {
+      backScore.textContent = scoreText;
+      backScore.style.display = "";
+    } else {
+      backScore.textContent = "";
+      backScore.style.display = "none";
+    }
+  }
 
   const backMeta = node.querySelector(".back-meta");
   if (backMeta) backMeta.textContent = backMetaText;
@@ -2255,11 +2821,23 @@ function buildRecommendationCardNode(rec, index) {
   const backSourceText = sourceAttributionText(movie);
   if (backOriginEl) {
     if (backSourceText) {
-      backOriginEl.textContent = `From ${backSourceText}`;
+      backOriginEl.textContent = `Sources: ${backSourceText}`;
       backOriginEl.style.display = "inline-flex";
     } else {
       backOriginEl.textContent = "";
       backOriginEl.style.display = "none";
+    }
+  }
+
+  // Personalized explanation
+  const explanationEl = node.querySelector(".explanation");
+  if (explanationEl) {
+    const explanation = rec.explanation || "";
+    if (explanation) {
+      explanationEl.textContent = explanation;
+      explanationEl.style.display = "block";
+    } else {
+      explanationEl.style.display = "none";
     }
   }
 
@@ -2282,62 +2860,62 @@ function buildRecommendationCardNode(rec, index) {
     });
   }
 
+  const datesEl = node.querySelector(".back-dates");
+  if (datesEl) {
+    datesEl.innerHTML = "";
+    const rows = movieDateRows(movie);
+    rows.forEach((row) => {
+      const li = document.createElement("li");
+      const label = document.createElement("span");
+      label.className = "date-label";
+      label.textContent = row.label;
+      const value = document.createElement("span");
+      value.className = "date-value";
+      value.textContent = row.value;
+      li.appendChild(label);
+      li.appendChild(value);
+      datesEl.appendChild(li);
+    });
+    datesEl.style.display = rows.length ? "grid" : "none";
+  }
+
   const reasonsEl = node.querySelector(".reasons");
   if (reasonsEl) {
     reasonsEl.innerHTML = "";
-    const evidence = evidenceItems(movie).slice(0, 3);
+    const evidence = evidenceItems(movie)
+      .filter((line) => !isDateEvidenceLine(line))
+      .slice(0, 6);
     evidence.forEach((line) => {
       const li = document.createElement("li");
       li.textContent = line;
       reasonsEl.appendChild(li);
     });
-    reasonsEl.style.display = evidence.length ? "grid" : "none";
+    reasonsEl.style.display = evidence.length ? "flex" : "none";
   }
 
-  // --- Availability Check Timestamp ---
-  const backEl = node.querySelector(".flip-card-back");
-  if (backEl) {
-    const tags = movie.source_tags || [];
-    const isUsenet = movie.available_on_usenet || tags.some(t => ["nzbgeek", "drunkenslug", "usenet"].includes(t.toLowerCase()));
-    const isUnreleased = tags.some(t => ["unreleased", "upcoming"].includes(t.toLowerCase()));
-
-    const checkTimestamp = document.createElement("div");
-    checkTimestamp.className = "availability-check";
-
-    let statusText = "Not Ready";
-    let statusClass = "unavailable";
-    if (isUsenet) {
-      statusText = "Ready";
-      statusClass = "ready";
-    } else if (isUnreleased) {
-      statusText = "Unreleased";
-      statusClass = "unreleased";
-    }
-
-    checkTimestamp.innerHTML = `
-      <span class="check-status ${statusClass}">${statusText}</span>
-      <span class="check-time">Checked just now</span>
-    `;
-    backEl.appendChild(checkTimestamp);
+  const backTextScrollEl = node.querySelector(".back-text-scroll");
+  if (backTextScrollEl) {
+    backTextScrollEl.addEventListener("click", (e) => e.stopPropagation());
+    backTextScrollEl.addEventListener("pointerdown", (e) => e.stopPropagation());
+    backTextScrollEl.addEventListener("wheel", (e) => e.stopPropagation(), { passive: true });
+    backTextScrollEl.addEventListener("touchstart", (e) => e.stopPropagation(), { passive: true });
   }
-
-  // --- Trailer embed on back ---
-  const trailerEmbed = node.querySelector(".trailer-embed");
-  let trailerLoaded = false;
 
   // --- Flip on click ---
-  card.addEventListener("click", () => {
-    card.classList.toggle("flipped");
-    if (card.classList.contains("flipped") && trailerEmbed && !trailerLoaded) {
-      trailerLoaded = true;
-      loadTrailerEmbed(trailerEmbed, movie);
+  card.addEventListener("click", (e) => {
+    if (
+      e.target.closest(
+        ".movie-actions, .back-text-scroll, .source-links, .source-link, .back-dates, button, a, input, select, textarea"
+      )
+    ) {
+      return;
     }
+    card.classList.toggle("flipped");
   });
 
   // --- Buttons ---
   const likeBtn = node.querySelector(".like");
   const dlBtn = node.querySelector(".download");
-  const dislikeBtn = node.querySelector(".dislike");
 
   likeBtn.addEventListener("click", async (e) => {
     e.stopPropagation();
@@ -2390,20 +2968,6 @@ function buildRecommendationCardNode(rec, index) {
       }
     });
   }
-
-  dislikeBtn.addEventListener("click", async (e) => {
-    e.stopPropagation();
-    if (dislikeBtn.disabled) return;
-    dislikeBtn.disabled = true;
-    likeBtn.disabled = true;
-    try {
-      await sendFeedback(movie, false);
-      card.style.opacity = "0.5";
-      dislikeBtn.textContent = "Skipped";
-    } catch (err) {
-      dislikeBtn.textContent = "Error";
-    }
-  });
 
   return node;
 }
@@ -2605,11 +3169,10 @@ function renderReleaseCalendar() {
 
       const day = item.dt.toLocaleString(undefined, { day: "2-digit" });
       const shortMonth = item.dt.toLocaleString(undefined, { month: "short" });
-      const sourceText = [...new Set(item.sources.map((s) => sourceLabel(canonicalSourceKey(s) || s)))].slice(0, 2).join(", ");
 
       const info = document.createElement("div");
       info.className = "cal-info";
-      info.innerHTML = `<span class="cal-date">${shortMonth} ${day}</span><span class="cal-title">${item.title}${item.year ? ` (${item.year})` : ""}<small class="cal-sources">${sourceText}</small></span>`;
+      info.innerHTML = `<span class="cal-date">${shortMonth} ${day}</span><span class="cal-title">${item.title}</span>`;
 
       const dlBtn = document.createElement("button");
       dlBtn.type = "button";
@@ -2674,10 +3237,23 @@ function getClientFilters() {
   };
 }
 
+// Fisher-Yates shuffle
+function shuffleArray(arr) {
+  const shuffled = [...arr];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
 function sortRecommendations(recommendations) {
   const sortVal = sortSelect?.value || "year-desc";
   const sorted = [...recommendations];
+
   switch (sortVal) {
+    case "random":
+      return shuffleArray(sorted);
     case "score-desc":
       sorted.sort((a, b) => (b.score || 0) - (a.score || 0));
       break;
@@ -2770,8 +3346,61 @@ function applyClientFilters(recommendations) {
   });
 }
 
+// Load Movie of the Day (instant - from static data)
+async function loadMovieOfTheDay() {
+  const motdSection = document.getElementById("motd-section");
+  const motdContainer = document.getElementById("motd-container");
+  const motdSource = document.getElementById("motd-source");
+
+  if (!motdSection || !motdContainer) return;
+
+  try {
+    const res = await fetch("/api/movie-of-the-day");
+    if (!res.ok) return;
+
+    const data = await res.json();
+    if (!data.ok || !data.movie) return;
+
+    const movie = data.movie;
+    motdSection.style.display = "block";
+    if (motdSource) motdSource.textContent = movie.source || "";
+
+    motdContainer.innerHTML = `
+      <div class="motd-card">
+        <div class="motd-poster">
+          ${movie.poster_url
+            ? `<img src="${movie.poster_url}" alt="${movie.title}" loading="lazy" />`
+            : `<div class="motd-no-poster">🎬</div>`
+          }
+        </div>
+        <div class="motd-info">
+          <h3 class="motd-title">${movie.title} <span class="motd-year">(${movie.year || ""})</span></h3>
+          <p class="motd-tagline">${movie.tagline || ""}</p>
+          <p class="motd-overview">${movie.overview || ""}</p>
+          ${movie.genres?.length ? `<div class="motd-genres">${movie.genres.map(g => `<span class="genre-tag">${g}</span>`).join("")}</div>` : ""}
+          ${movie.nominees?.length ? `<p class="motd-nominees"><strong>Also nominated:</strong> ${movie.nominees.slice(0, 4).join(", ")}</p>` : ""}
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    console.warn("Failed to load movie of the day:", e);
+  }
+}
+
 async function loadRecommendations() {
   const user = currentUserId();
+  const recLoading = document.getElementById("rec-loading");
+  if (recLoading) recLoading.style.display = "inline";
+
+  // Show API stats during load
+  const statsEl = document.getElementById("api-stats");
+  const statsTextEl = document.getElementById("api-stats-text");
+  if (statsEl && statsTextEl) {
+    statsEl.hidden = false;
+    statsTextEl.innerHTML = '<span style="color:var(--warning)">●</span> Loading recommendations...';
+  }
+  const loadStart = performance.now();
+
   const rawCount = Number.parseInt(countInput?.value, 10) || 12;
   const count = Math.max(1, Math.min(rawCount, MAX_RECOMMENDATION_COUNT));
   if (countInput) countInput.value = String(count);
@@ -2817,6 +3446,10 @@ async function loadRecommendations() {
 
     renderSwarm(data.agents || []);
 
+    // Update freshness timestamp
+    lastDataFetchAt = new Date();
+    renderFreshness();
+
     // Apply client-side filters and sorting
     let filtered = applyClientFilters(data.recommendations || []);
     filtered = sortRecommendations(filtered);
@@ -2832,8 +3465,23 @@ async function loadRecommendations() {
 
     renderHeroMovie(heroRec);
     renderRecommendations(gridRecs);
+
+    // Show load time
+    const loadTime = Math.round(performance.now() - loadStart);
+    if (statsEl && statsTextEl) {
+      statsTextEl.innerHTML = `<span style="color:var(--success)">●</span> Loaded ${filtered.length} movies in ${loadTime}ms`;
+    }
+
+    // Start SSE stream to get real-time agent updates in background
+    startAgentStream(user, fetchCount);
   } catch (err) {
     console.error("Failed to load recommendations:", err);
+    if (statsEl && statsTextEl) {
+      statsTextEl.innerHTML = `<span style="color:var(--danger)">●</span> Load failed`;
+    }
+  } finally {
+    const recLoading = document.getElementById("rec-loading");
+    if (recLoading) recLoading.style.display = "none";
   }
 }
 
@@ -2934,8 +3582,12 @@ async function performSearch(query) {
     return;
   }
 
+  // Detect natural language queries for AI search
+  const isNaturalLanguage = /\b(like|similar|best|top|good|great|recommend|suggest|find me|show me|movies about|films about|something|anything)\b/i.test(query);
+  const aiParam = isNaturalLanguage ? "&ai=true" : "";
+
   try {
-    const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+    const res = await fetch(`/api/search?q=${encodeURIComponent(query)}${aiParam}`);
     const data = await res.json();
 
     searchResultsEl.innerHTML = "";
@@ -3119,6 +3771,8 @@ clearAllFiltersBtn?.addEventListener("click", clearAllFilters);
 
 // Availability filter toggles
 document.querySelectorAll(".availability-toggle").forEach((btn) => {
+  // Set initial active state based on default filter
+  btn.classList.toggle("active", btn.dataset.filter === availabilityFilter);
   btn.addEventListener("click", () => {
     const filter = btn.dataset.filter;
     availabilityFilter = filter;
@@ -3369,10 +4023,9 @@ function stripMovieYear(label) {
   return String(label || "").replace(/\s*\(\d{4}\)\s*$/, "").trim();
 }
 
-function clipChipLabel(text, limit = 18) {
-  const raw = String(text || "").trim();
-  if (raw.length <= limit) return raw;
-  return `${raw.slice(0, limit - 1).trimEnd()}…`;
+function clipChipLabel(text, limit = 50) {
+  // No truncation - CSS handles overflow with scrolling
+  return String(text || "").trim();
 }
 
 function normalizeAiResponse(raw) {
@@ -3414,37 +4067,63 @@ function buildAiContext() {
   return parts.join("; ");
 }
 
+function isUsenetAvailable(rec) {
+  const movie = recMovie(rec);
+  if (!movie) return false;
+  const tags = movie.source_tags || [];
+  return movie.available_on_usenet || tags.some(t =>
+    ["nzbgeek", "drunkenslug", "usenet", "nzbgeek-rss"].includes(String(t).toLowerCase())
+  );
+}
+
+function getMovieSources(rec) {
+  const movie = recMovie(rec);
+  if (!movie) return [];
+  const sources = [];
+  const tags = movie.source_tags || [];
+
+  if (isUsenetAvailable(rec)) sources.push("⚡");
+  if (tags.some(t => ["rt", "rottentomatoes"].includes(String(t).toLowerCase()))) sources.push("🍅");
+  if (tags.some(t => ["oscars"].includes(String(t).toLowerCase()))) sources.push("🏆");
+  if (tags.some(t => ["criterion"].includes(String(t).toLowerCase()))) sources.push("🎬");
+  if (tags.some(t => ["a24", "neon"].includes(String(t).toLowerCase()))) sources.push("🎭");
+
+  return sources;
+}
+
 function buildAiSuggestions() {
   const dynamic = [];
-  const topMovie = formatRecLabel(currentRecommendations?.[0]);
-  const secondMovie = formatRecLabel(currentRecommendations?.[1]);
-  const thirdMovie = formatRecLabel(currentRecommendations?.[2]);
 
-  const topTitle = clipChipLabel(stripMovieYear(topMovie), 11);
-  const secondTitle = clipChipLabel(stripMovieYear(secondMovie), 11);
-  const thirdTitle = clipChipLabel(stripMovieYear(thirdMovie), 11);
+  // Prioritize movies available on Usenet
+  const usenetMovies = currentRecommendations.filter(isUsenetAvailable);
+  const otherMovies = currentRecommendations.filter(r => !isUsenetAvailable(r));
+  const prioritized = [...usenetMovies, ...otherMovies];
 
-  if (topMovie && topTitle) {
+  // Get top 3 movies (prioritizing Usenet availability)
+  const top3 = prioritized.slice(0, 3);
+
+  top3.forEach((rec, idx) => {
+    const movie = recMovie(rec);
+    if (!movie?.title) return;
+
+    const title = movie.title;
+    const year = movie.year || "";
+    const sources = getMovieSources(rec);
+    const sourceStr = sources.join("");
+    const isReady = isUsenetAvailable(rec);
+
+    // Find original index in currentRecommendations
+    const movieIndex = currentRecommendations.findIndex(r => recMovie(r)?.title === title);
+
+    const prefix = idx === 0 ? "Pick" : idx === 1 ? "Backup" : "Alt";
+    const label = `${sourceStr} ${prefix} ${title}`;
+
     dynamic.push({
-      label: `Pick ${topTitle}`,
-      prompt: `Should I watch ${topMovie} tonight? Format exactly: Pick: ${topMovie} - <one short reason>.`,
-      movieIndex: 0,
+      label,
+      prompt: `Should I watch ${title} (${year}) tonight? It's ${isReady ? "ready to download" : "not yet available"}. Format exactly: ${prefix}: ${title} (${year}) - <one short reason>.`,
+      movieIndex: movieIndex >= 0 ? movieIndex : idx,
     });
-  }
-  if (topMovie && secondMovie && topTitle && secondTitle) {
-    dynamic.push({
-      label: `Backup ${secondTitle}`,
-      prompt: `If ${topMovie} is unavailable, pick a backup from my current recommendations, preferably ${secondMovie}. Format exactly: Backup: <title> (<year>) - <one short reason>.`,
-      movieIndex: 1,
-    });
-  }
-  if (thirdMovie && thirdTitle) {
-    dynamic.push({
-      label: `Alt ${thirdTitle}`,
-      prompt: `Give one alternative with a different vibe, leaning toward ${thirdMovie}. Format exactly: Alt: <title> (<year>) - <one short reason>.`,
-      movieIndex: 2,
-    });
-  }
+  });
 
   const merged = dynamic.length ? dynamic : DEFAULT_AI_SUGGESTIONS;
   return merged
@@ -3512,9 +4191,13 @@ function renderAiFeaturedMovie(rec, reason = "Recommended now") {
 
   const meta = document.createElement("div");
   meta.className = "ai-featured-meta";
-  const score = Number.isFinite(rec?.score) ? `Score ${Math.round(rec.score)}` : null;
+  const featuredScoreValue = displayScoreValue(rec);
+  const score = featuredScoreValue != null ? `Score ${featuredScoreValue}` : null;
   const origin = sourceOriginText(movie);
-  meta.textContent = [movie.year || null, criticLabel(movie), score, origin ? `From ${origin}` : null]
+  const isReady = isUsenetAvailable(rec);
+  const readyStatus = isReady ? "⚡ Ready" : "⏳ Not Ready";
+  const sources = getMovieSources(rec).join(" ");
+  meta.textContent = [movie.year || null, readyStatus, criticLabel(movie), score, sources]
     .filter(Boolean)
     .join(" • ");
 
@@ -3633,8 +4316,14 @@ async function sendAiMessage(presetMessage = null) {
     const data = await res.json();
 
     loadingMsg.remove();
+
+    // Ensure chat is expanded to show response
+    aiChatCard?.classList.remove("collapsed");
+    aiChatCard?.classList.add("expanded");
+
     const responseText = normalizeAiResponse(data.response || "No response");
     addChatMessage(responseText, "assistant", data.sources_queried || []);
+    console.log("AI Response:", data.response);  // Debug
     const mentionedRec = findRecommendationFromText(data.response);
     if (mentionedRec) {
       renderAiFeaturedMovie(mentionedRec, "AI pick");
@@ -3681,21 +4370,16 @@ async function checkAiStatus() {
 const yearSlider = document.getElementById("year-slider");
 const yearDisplay = document.getElementById("year-display");
 const clearYearBtn = document.getElementById("clear-year-btn");
-const decadeChips = document.querySelectorAll(".decade-chip");
 const resultsCountEl = document.getElementById("results-count");
 const loadAllBtn = document.getElementById("load-all-btn");
 
 let selectedYear = null;
-let selectedDecade = null;
 
-function updateYearDisplay(year, isDecade = false) {
+function updateYearDisplay(year) {
   if (!yearDisplay) return;
   if (year === null) {
     yearDisplay.textContent = "Any Year";
     yearDisplay.style.color = "var(--text-muted)";
-  } else if (isDecade) {
-    yearDisplay.textContent = `${year}s`;
-    yearDisplay.style.color = "var(--primary)";
   } else {
     yearDisplay.textContent = year;
     yearDisplay.style.color = "var(--primary)";
@@ -3718,10 +4402,6 @@ function updateResultsCount(shown, total, yearLabel = null) {
   }
 }
 
-function clearDecadeChipActive() {
-  decadeChips.forEach((chip) => chip.classList.remove("active"));
-}
-
 function applyYearFilter(yearFrom, yearTo) {
   // Set hidden inputs for the recommendation API
   if (yearFromEl) yearFromEl.value = yearFrom || "";
@@ -3733,41 +4413,13 @@ function applyYearFilter(yearFrom, yearTo) {
 function handleYearSliderRelease() {
   const year = parseInt(yearSlider.value, 10);
   selectedYear = year;
-  selectedDecade = null;
-  clearDecadeChipActive();
   updateYearDisplay(year);
   // Filter to just this year
   applyYearFilter(year, year);
 }
 
-function handleDecadeClick(decade) {
-  selectedDecade = decade;
-  selectedYear = null;
-  clearDecadeChipActive();
-
-  if (decade === "classic") {
-    // Classic = pre-1970
-    updateYearDisplay("Classic");
-    applyYearFilter(1900, 1969);
-  } else {
-    const decadeStart = parseInt(decade, 10);
-    const decadeEnd = decadeStart + 9;
-    if (yearSlider) yearSlider.value = decadeStart;
-    updateYearDisplay(decadeStart, true);
-    applyYearFilter(decadeStart, decadeEnd);
-  }
-
-  decadeChips.forEach((chip) => {
-    if (chip.dataset.decade === decade) {
-      chip.classList.add("active");
-    }
-  });
-}
-
 function clearYearFilter() {
   selectedYear = null;
-  selectedDecade = null;
-  clearDecadeChipActive();
   updateYearDisplay(null);
   if (yearSlider) yearSlider.value = 2026;
   applyYearFilter(null, null);
@@ -3787,19 +4439,13 @@ if (clearYearBtn) {
   clearYearBtn.addEventListener("click", clearYearFilter);
 }
 
-decadeChips.forEach((chip) => {
-  chip.addEventListener("click", () => {
-    handleDecadeClick(chip.dataset.decade);
-  });
-});
-
 if (loadAllBtn) {
   loadAllBtn.addEventListener("click", () => {
     // Render all remaining cards
     while (renderedRecommendationCount < currentRecommendations.length) {
       appendRecommendationBatch();
     }
-    const yearLabel = selectedYear || (selectedDecade ? `${selectedDecade}s` : null);
+    const yearLabel = selectedYear || null;
     updateResultsCount(renderedRecommendationCount, currentRecommendations.length, yearLabel);
   });
 }
@@ -3808,7 +4454,7 @@ if (loadAllBtn) {
 const originalRenderRecommendations = renderRecommendations;
 renderRecommendations = function(recommendations) {
   originalRenderRecommendations(recommendations);
-  const yearLabel = selectedYear || (selectedDecade ? `${selectedDecade}s` : null);
+  const yearLabel = selectedYear || null;
   setTimeout(() => {
     updateResultsCount(renderedRecommendationCount, currentRecommendations.length, yearLabel);
   }, 100);
@@ -3933,12 +4579,22 @@ async function loadJustAdded() {
             return tags.includes("now-playing") || tags.includes("nzbgeek") || tags.includes("drunkenslug");
           })
           .slice(0, 10)
-          .map(r => ({
-            title: r.movie.title,
-            year: r.movie.year,
-            poster_url: r.movie.poster_url,
-            score: r.movie.rottentomatoes_score,
-          }));
+          .map((r) => {
+            const tags = new Set((r.movie?.source_tags || []).map((tag) => String(tag || "").toLowerCase()));
+            const found = extractUsenetFoundDates(r.movie?.evidence || []);
+            return {
+              title: r.movie.title,
+              year: r.movie.year,
+              poster_url: r.movie.poster_url,
+              overview: r.movie.overview,
+              score: r.movie.rottentomatoes_score,
+              official_release_date: r.movie.release_date || null,
+              drunkenslug_found_at: found.drunkenslug,
+              nzbgeek_found_at: found.nzbgeek,
+              source: tags.has("drunkenslug") ? "drunkenslug" : "nzbgeek",
+              evidence: r.movie.evidence || [],
+            };
+          });
       }
     }
 
@@ -3962,35 +4618,69 @@ function renderJustAdded(releases) {
     return;
   }
 
+  const escapeHtmlAttr = (value) => String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
   justAddedGrid.innerHTML = releases
     .map((release) => {
       const posterUrl = release.poster_url || "";
       const title = release.title || "Unknown";
       const year = release.year || "";
-      const score = release.score || null;
+      const score = toPositiveNumber(release.score);
+      const roundedScore = score == null ? null : Math.round(score);
+      const dateRows = movieDateRows({
+        release_date: release.release_date || release.official_release_date || null,
+        official_release_date: release.official_release_date || null,
+        drunkenslug_found_at: release.drunkenslug_found_at || null,
+        nzbgeek_found_at: release.nzbgeek_found_at || release.pub_date || null,
+        pub_date: release.pub_date || null,
+        evidence: release.evidence || [],
+      });
+      const officialRow = dateRows.find((row) => row.label === "Official");
+      const foundRow = dateRows.find((row) => row.label === "DS Found")
+        || dateRows.find((row) => row.label === "NZBGeek Found");
 
       const posterHtml = posterUrl
-        ? `<img class="cover-image" src="${posterUrl}" alt="${title}" loading="lazy" />`
-        : `<div class="cover-fallback"><span class="cover-monogram">${title.substring(0, 2).toUpperCase()}</span></div>`;
+        ? `<img class="cover-image" src="${escapeHtmlAttr(posterUrl)}" alt="${escapeHtmlAttr(title)}" loading="lazy" />`
+        : `<div class="cover-fallback"><span class="cover-monogram">${escapeHtmlAttr(title.substring(0, 2).toUpperCase())}</span></div>`;
 
-      const scoreHtml = score
-        ? `<div class="flip-front-score score-badge">${score}</div>`
+      const scoreHtml = roundedScore != null && roundedScore > 0
+        ? `<div class="flip-front-score score-badge">${roundedScore}</div>`
         : "";
 
-      // Download status badge - Just Added are always from NZBGeek so they're ready
+      // Download status badge - Just Added entries are all usenet-ready.
       const statusBadge = `<div class="download-status ready"><span class="status-icon">⚡</span><span class="status-text">Ready</span></div>`;
 
-      const overview = (release.overview || "").replace(/"/g, '&quot;');
+      const overview = escapeHtmlAttr(release.overview || "");
+      const source = String(release.source || "").trim().toLowerCase() || "nzbgeek";
+      const metaParts = [
+        year || null,
+        officialRow ? `Official ${officialRow.value}` : null,
+        foundRow ? `${foundRow.label} ${foundRow.value}` : null,
+      ].filter(Boolean);
       return `
-        <article class="flip-card is-ready" data-title="${title}" data-year="${year}" data-poster="${posterUrl}" data-overview="${overview}">
+        <article
+          class="flip-card is-ready"
+          data-title="${escapeHtmlAttr(title)}"
+          data-year="${escapeHtmlAttr(year)}"
+          data-poster="${escapeHtmlAttr(posterUrl)}"
+          data-overview="${overview}"
+          data-official-release="${escapeHtmlAttr(officialRow ? officialRow.value : "")}"
+          data-found-label="${escapeHtmlAttr(foundRow ? foundRow.label : "")}"
+          data-found-date="${escapeHtmlAttr(foundRow ? foundRow.value : "")}"
+          data-source="${escapeHtmlAttr(source)}"
+        >
           <div class="flip-card-inner">
             <div class="flip-card-front">
               ${posterHtml}
               ${scoreHtml}
               ${statusBadge}
               <div class="flip-front-overlay">
-                <div class="flip-front-title">${title}</div>
-                <p class="flip-front-meta">${year}</p>
+                <div class="flip-front-title">${escapeHtmlAttr(title)}</div>
+                <p class="flip-front-meta">${escapeHtmlAttr(metaParts.join(" • "))}</p>
               </div>
             </div>
           </div>
@@ -4006,6 +4696,10 @@ function renderJustAdded(releases) {
       const year = card.dataset.year;
       const posterUrl = card.dataset.poster || "";
       const overview = card.dataset.overview || "";
+      const officialRelease = card.dataset.officialRelease || "";
+      const foundLabel = card.dataset.foundLabel || "";
+      const foundDate = card.dataset.foundDate || "";
+      const source = card.dataset.source || "nzbgeek";
 
       // First try to find in recommendations
       const found = currentRecommendations.find(
@@ -4017,17 +4711,31 @@ function renderJustAdded(releases) {
       }
 
       // Create a movie object for the modal
+      const evidence = [];
+      if (officialRelease) evidence.push(`Official release date: ${officialRelease}`);
+      if (foundDate) {
+        if (foundLabel.toLowerCase().startsWith("ds")) {
+          evidence.push(`DrunkenSlug item date: ${foundDate}`);
+        } else {
+          evidence.push(`NZBGeek item date: ${foundDate}`);
+        }
+      }
       const movieData = {
         movie: {
           title: title,
           year: parseInt(year) || null,
           poster_url: posterUrl,
           overview: overview,
-          source_tags: ["nzbgeek"],
+          release_date: officialRelease || null,
+          official_release_date: officialRelease || null,
+          drunkenslug_found_at: foundLabel.toLowerCase().startsWith("ds") ? foundDate : null,
+          nzbgeek_found_at: foundLabel.toLowerCase().startsWith("nzbgeek") ? foundDate : null,
+          source_tags: [source],
+          evidence,
           available_on_usenet: true,
         },
         score: 0,
-        reason: "New release from NZBGeek",
+        reason: `New release from ${source === "drunkenslug" ? "DrunkenSlug" : "NZBGeek"}`,
       };
       openMovieModal(movieData);
     });
@@ -4199,10 +4907,13 @@ if (justAddedSyncBtn) {
 // Initialize
 (async function init() {
   initTheme();
+  initCustomThemeEditor();
   initAuth();
   renderHomeSourceFilters();
   renderAiSuggestions();
-  await Promise.all([
+
+  // Load quick UI elements in parallel
+  Promise.all([
     fetchIntegrations(),
     loadDownloadActivity(),
     loadRadarrMonitored(),
@@ -4212,9 +4923,11 @@ if (justAddedSyncBtn) {
     loadMoods(),
     loadJustAdded(),
   ]);
-  await loadRecommendations();
 
-  // Load suggested moods after recommendations (needs feedback data)
+  // Load recommendations in background (don't block)
+  loadRecommendations();
+
+  // Load suggested moods
   loadSuggestedMoods();
 
   // Start auto-refresh for downloads
@@ -4290,4 +5003,535 @@ function initSmartStickySidebar() {
 
   // Initial setup
   updateSidebar();
+}
+
+// ===== MCP Tools =====
+
+const mcpCard = document.getElementById("mcp-card");
+const mcpToggle = document.getElementById("mcp-toggle");
+const mcpBody = document.getElementById("mcp-body");
+const mcpToolsGrid = document.getElementById("mcp-tools-grid");
+const mcpStatus = document.getElementById("mcp-status");
+const mcpResult = document.getElementById("mcp-result");
+const mcpResultTitle = document.getElementById("mcp-result-title");
+const mcpResultContent = document.getElementById("mcp-result-content");
+const mcpResultClose = document.getElementById("mcp-result-close");
+const mcpProviderSelect = document.getElementById("mcp-provider-select");
+
+const mcpModal = document.getElementById("mcp-modal");
+const mcpModalBackdrop = document.getElementById("mcp-modal-backdrop");
+const mcpModalIcon = document.getElementById("mcp-modal-icon");
+const mcpModalTitle = document.getElementById("mcp-modal-title");
+const mcpModalDesc = document.getElementById("mcp-modal-desc");
+const mcpModalParams = document.getElementById("mcp-modal-params");
+const mcpModalForm = document.getElementById("mcp-modal-form");
+const mcpModalClose = document.getElementById("mcp-modal-close");
+const mcpModalCancel = document.getElementById("mcp-modal-cancel");
+const mcpModalSubmit = document.getElementById("mcp-modal-submit");
+const mcpSubmitText = mcpModalSubmit?.querySelector(".mcp-submit-text");
+const mcpSubmitSpinner = mcpModalSubmit?.querySelector(".mcp-submit-spinner");
+
+let mcpTools = [];
+let currentMcpTool = null;
+let mcpProviders = { groq: false, ollama: false };
+let mcpSelectedProvider = localStorage.getItem("mcp-provider") || "auto";
+
+// Load and render MCP tools
+async function loadMcpTools() {
+  try {
+    const res = await fetch("/api/mcp/tools");
+    const data = await res.json();
+    if (data.ok) {
+      mcpTools = data.tools || [];
+      mcpProviders = {
+        groq: data.groq_available || false,
+        ollama: data.ollama_available || false,
+        groq_model: data.groq_model || "groq",
+        ollama_model: data.ollama_model || "ollama",
+      };
+      renderMcpProviderSelect();
+      renderMcpTools();
+      updateMcpStatus(data.llm_available, data.llm_provider);
+    }
+  } catch (err) {
+    console.error("Failed to load MCP tools:", err);
+    if (mcpStatus) {
+      mcpStatus.textContent = "Offline";
+      mcpStatus.classList.add("offline");
+    }
+  }
+}
+
+function renderMcpProviderSelect() {
+  if (!mcpProviderSelect) return;
+  mcpProviderSelect.innerHTML = "";
+
+  // Auto option
+  const autoOpt = document.createElement("option");
+  autoOpt.value = "auto";
+  autoOpt.textContent = "Auto (fastest)";
+  mcpProviderSelect.appendChild(autoOpt);
+
+  // Groq option
+  if (mcpProviders.groq) {
+    const groqOpt = document.createElement("option");
+    groqOpt.value = "groq";
+    groqOpt.textContent = `☁️ Groq Cloud`;
+    mcpProviderSelect.appendChild(groqOpt);
+  }
+
+  // Ollama option
+  if (mcpProviders.ollama) {
+    const ollamaOpt = document.createElement("option");
+    ollamaOpt.value = "ollama";
+    ollamaOpt.textContent = `🏠 Ollama Local`;
+    mcpProviderSelect.appendChild(ollamaOpt);
+  }
+
+  // Restore selection
+  if (mcpSelectedProvider && mcpProviderSelect.querySelector(`option[value="${mcpSelectedProvider}"]`)) {
+    mcpProviderSelect.value = mcpSelectedProvider;
+  } else {
+    mcpProviderSelect.value = "auto";
+  }
+}
+
+function getMcpProvider() {
+  const selected = mcpProviderSelect?.value || mcpSelectedProvider || "auto";
+  if (selected === "auto") return null;
+  return selected;
+}
+
+function updateMcpStatus(available, provider) {
+  if (!mcpStatus) return;
+  if (available) {
+    const selectedProvider = getMcpProvider();
+    const displayProvider = selectedProvider || provider || "Ready";
+    mcpStatus.textContent = displayProvider;
+    mcpStatus.classList.remove("offline");
+  } else {
+    mcpStatus.textContent = "No LLM";
+    mcpStatus.classList.add("offline");
+  }
+}
+
+function renderMcpTools() {
+  if (!mcpToolsGrid) return;
+  mcpToolsGrid.innerHTML = "";
+
+  mcpTools.forEach((tool) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "mcp-tool-btn";
+    btn.dataset.tool = tool.name;
+    btn.innerHTML = `
+      <span class="mcp-tool-icon">${tool.icon || "🔧"}</span>
+      <span class="mcp-tool-name">${formatToolName(tool.name)}</span>
+      <span class="mcp-tool-desc">${tool.description}</span>
+    `;
+    btn.addEventListener("click", () => openMcpModal(tool));
+    mcpToolsGrid.appendChild(btn);
+  });
+}
+
+function formatToolName(name) {
+  return name
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function openMcpModal(tool) {
+  if (!mcpModal) return;
+  currentMcpTool = tool;
+
+  if (mcpModalIcon) mcpModalIcon.textContent = tool.icon || "🔧";
+  if (mcpModalTitle) mcpModalTitle.textContent = formatToolName(tool.name);
+  if (mcpModalDesc) mcpModalDesc.textContent = tool.description;
+
+  // Render params
+  if (mcpModalParams) {
+    mcpModalParams.innerHTML = "";
+    const params = tool.params || [];
+    if (params.length === 0) {
+      mcpModalParams.innerHTML = '<div class="mcp-no-params">No parameters needed</div>';
+    } else {
+      params.forEach((param) => {
+        const group = document.createElement("div");
+        group.className = "mcp-param-group";
+        const inputId = `mcp-param-${param.name}`;
+        const inputType = param.type === "number" ? "number" : "text";
+        const required = param.required ? "required" : "";
+        const defaultVal = param.default !== undefined ? param.default : "";
+
+        group.innerHTML = `
+          <label class="mcp-param-label" for="${inputId}">${param.label || param.name}</label>
+          <input
+            type="${inputType}"
+            id="${inputId}"
+            name="${param.name}"
+            class="mcp-param-input"
+            placeholder="${param.label || param.name}"
+            value="${defaultVal}"
+            ${required}
+          />
+        `;
+        mcpModalParams.appendChild(group);
+      });
+    }
+  }
+
+  mcpModal.hidden = false;
+  // Focus first input
+  const firstInput = mcpModalParams?.querySelector("input");
+  if (firstInput) firstInput.focus();
+}
+
+function closeMcpModal() {
+  if (mcpModal) mcpModal.hidden = true;
+  currentMcpTool = null;
+  resetMcpSubmitBtn();
+}
+
+function resetMcpSubmitBtn() {
+  if (mcpSubmitText) mcpSubmitText.textContent = "Run";
+  if (mcpSubmitSpinner) mcpSubmitSpinner.hidden = true;
+  if (mcpModalSubmit) mcpModalSubmit.disabled = false;
+}
+
+function setMcpSubmitLoading(loading) {
+  if (!mcpModalSubmit) return;
+  mcpModalSubmit.disabled = loading;
+  if (mcpSubmitText) mcpSubmitText.textContent = loading ? "" : "Run";
+  if (mcpSubmitSpinner) mcpSubmitSpinner.hidden = !loading;
+}
+
+async function invokeMcpTool(tool, args) {
+  const provider = getMcpProvider();
+  const res = await fetch("/api/mcp/invoke", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      tool: tool.name,
+      arguments: args,
+      user_id: getCurrentUserId(),
+      provider: provider,
+    }),
+  });
+  return res.json();
+}
+
+function getCurrentUserId() {
+  try {
+    const user = JSON.parse(localStorage.getItem(AUTH_USER_KEY) || "{}");
+    return user.id || "default";
+  } catch {
+    return "default";
+  }
+}
+
+function renderMcpResult(tool, data) {
+  if (!mcpResult || !mcpResultContent || !mcpResultTitle) return;
+
+  mcpResultTitle.textContent = formatToolName(tool.name);
+
+  if (!data.ok) {
+    mcpResultContent.innerHTML = `<div style="color: var(--danger);">Error: ${data.error || "Unknown error"}</div>`;
+    mcpResult.hidden = false;
+    return;
+  }
+
+  let html = "";
+
+  if (tool.name === "recommend_movies" && data.recommendations) {
+    html = data.recommendations.map((rec) => `
+      <div class="mcp-result-movie">
+        ${rec.poster ? `<img class="mcp-result-movie-poster" src="${rec.poster}" alt="" />` : ""}
+        <div class="mcp-result-movie-info">
+          <div class="mcp-result-movie-title">${rec.title} (${rec.year || "?"})</div>
+          <div class="mcp-result-movie-meta">${rec.genres?.join(", ") || ""} • ${rec.score || "N/A"}%</div>
+          <div class="mcp-result-movie-reason">${rec.explanation}</div>
+        </div>
+      </div>
+    `).join("");
+  } else if (tool.name === "search_movies" && data.results) {
+    if (data.results.length === 0) {
+      html = `<div class="mcp-no-params">No movies found for "${data.query}"</div>`;
+    } else {
+      html = data.results.map((m) => `
+        <div class="mcp-result-movie">
+          ${m.poster ? `<img class="mcp-result-movie-poster" src="${m.poster}" alt="" />` : ""}
+          <div class="mcp-result-movie-info">
+            <div class="mcp-result-movie-title">${m.title} (${m.year || "?"})</div>
+            <div class="mcp-result-movie-meta">${m.genres?.join(", ") || ""} • ${m.score || "N/A"}%</div>
+          </div>
+        </div>
+      `).join("");
+    }
+  } else if (tool.name === "explain_movie" && data.explanation) {
+    html = `<strong>${data.title}</strong><br/><br/>${formatMcpText(data.explanation)}`;
+  } else if (tool.name === "analyze_taste" && data.analysis) {
+    html = `
+      <div class="mcp-result-movie-meta" style="margin-bottom: 10px;">
+        Liked: ${data.liked_count} • Disliked: ${data.disliked_count}
+      </div>
+      ${formatMcpText(data.analysis)}
+    `;
+  } else if (tool.name === "movie_deep_dive" && data.analysis) {
+    html = `<strong>${data.title}</strong><br/><br/>${formatMcpText(data.analysis)}`;
+  } else {
+    html = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+  }
+
+  mcpResultContent.innerHTML = html;
+  mcpResult.hidden = false;
+
+  // Scroll result into view
+  mcpResult.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function formatMcpText(text) {
+  if (!text) return "";
+  // Convert markdown-style headers to HTML
+  return text
+    .replace(/^## (.+)$/gm, "<h2>$1</h2>")
+    .replace(/\n\n/g, "</p><p>")
+    .replace(/\n/g, "<br/>")
+    .replace(/^/, "<p>")
+    .replace(/$/, "</p>");
+}
+
+// Event listeners
+mcpToggle?.addEventListener("click", () => {
+  if (!mcpCard) return;
+  mcpCard.classList.toggle("collapsed");
+});
+
+mcpResultClose?.addEventListener("click", () => {
+  if (mcpResult) mcpResult.hidden = true;
+});
+
+mcpModalBackdrop?.addEventListener("click", closeMcpModal);
+mcpModalClose?.addEventListener("click", closeMcpModal);
+mcpModalCancel?.addEventListener("click", closeMcpModal);
+
+mcpModalForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!currentMcpTool) return;
+
+  const formData = new FormData(mcpModalForm);
+  const args = {};
+  for (const [key, value] of formData.entries()) {
+    if (value !== "") {
+      // Convert numbers
+      const param = currentMcpTool.params?.find((p) => p.name === key);
+      args[key] = param?.type === "number" ? Number(value) : value;
+    }
+  }
+
+  setMcpSubmitLoading(true);
+
+  try {
+    const result = await invokeMcpTool(currentMcpTool, args);
+    closeMcpModal();
+    renderMcpResult(currentMcpTool, result);
+  } catch (err) {
+    console.error("MCP invoke error:", err);
+    closeMcpModal();
+    renderMcpResult(currentMcpTool, { ok: false, error: err.message });
+  }
+});
+
+// Keyboard shortcut to close modal
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && mcpModal && !mcpModal.hidden) {
+    closeMcpModal();
+  }
+});
+
+// Initialize MCP on load
+if (mcpCard) {
+  loadMcpTools();
+
+  // Restore collapsed state
+  const mcpCollapsed = localStorage.getItem("mcp-collapsed") === "true";
+  if (mcpCollapsed) {
+    mcpCard.classList.add("collapsed");
+  }
+
+  // Save collapsed state
+  mcpToggle?.addEventListener("click", () => {
+    localStorage.setItem("mcp-collapsed", mcpCard.classList.contains("collapsed"));
+  });
+
+  // Provider selection
+  mcpProviderSelect?.addEventListener("change", (e) => {
+    mcpSelectedProvider = e.target.value;
+    localStorage.setItem("mcp-provider", mcpSelectedProvider);
+    // Update status badge to show selected provider
+    const provider = mcpSelectedProvider === "auto" ? "auto" : mcpSelectedProvider;
+    if (mcpStatus) {
+      mcpStatus.textContent = provider;
+    }
+  });
+}
+
+// ===== Data Freshness Indicator =====
+
+const SOURCE_DISPLAY_NAMES = {
+  usenet: "Usenet/NZBGeek",
+  oscars: "Oscars",
+  criterion: "Criterion",
+};
+
+async function loadDataFreshness() {
+  try {
+    const res = await fetch("/api/data-freshness");
+    if (!res.ok) throw new Error("Failed to fetch freshness");
+    freshnessData = await res.json();
+    renderFreshness();
+  } catch (err) {
+    console.error("[Freshness] Error:", err);
+    if (freshnessLabel) {
+      freshnessLabel.textContent = "0% • Connecting...";
+    }
+    const dot = freshnessChip?.querySelector(".freshness-dot");
+    if (dot) {
+      dot.classList.add("error");
+    }
+  }
+}
+
+function renderFreshness() {
+  if (!freshnessData || !freshnessData.ok) return;
+
+  const agentCount = freshnessData.swarm?.agent_count || 0;
+  const fetchTime = lastDataFetchAt ? relativeTimeFromNow(lastDataFetchAt) : null;
+
+  // Simple chip label - count + last fetch time
+  if (freshnessLabel) {
+    if (fetchTime) {
+      freshnessLabel.textContent = `${agentCount} • ${fetchTime}`;
+    } else {
+      freshnessLabel.textContent = agentCount > 0 ? `${agentCount}` : "...";
+    }
+  }
+
+  // Set tooltip with more detail
+  if (freshnessChip) {
+    const status = fetchTime ? `Last refresh: ${fetchTime}` : "Ready";
+    freshnessChip.title = `${agentCount} data sources\n${status}`;
+  }
+
+  // Update dot color based on agent availability and freshness
+  const dot = freshnessChip?.querySelector(".freshness-dot");
+  if (dot) {
+    dot.classList.remove("stale", "error");
+    if (!agentCount) {
+      dot.classList.add("error");
+    } else if (lastDataFetchAt) {
+      const ageMin = (Date.now() - lastDataFetchAt.getTime()) / 60000;
+      if (ageMin > 60) dot.classList.add("stale"); // Yellow after 1 hour
+    }
+  }
+
+  // Render source list
+  if (freshnessSources) {
+    const agents = freshnessData.swarm?.agents || [];
+    const fetchTime = lastDataFetchAt ? relativeTimeFromNow(lastDataFetchAt) : null;
+
+    // Show agent categories
+    const categories = {
+      "Live Data": ["rottentomatoes", "rogerebert", "upcoming", "releases", "nzbgeek", "drunkenslug", "plex"],
+      "Curated Lists": ["oscars", "criterion", "imdb_top250", "afi100", "sight_sound", "letterboxd", "mubi", "metacritic"],
+      "Studios": ["a24", "neon", "blumhouse", "pixar", "disney", "ghibli", "marvel_dc"],
+      "Awards": ["cannes", "sundance", "bafta", "golden_globes", "film_registry"],
+      "Genres": ["horror_classics", "scifi", "anime", "film_noir", "korean_cinema", "hidden_gems", "decades", "directors", "boxoffice"]
+    };
+
+    let html = "";
+
+    // Show last refresh at top
+    if (fetchTime) {
+      html += `
+        <li class="freshness-category" style="background: var(--bg-hover);">
+          <span class="freshness-source-name">
+            <span class="source-dot"></span>
+            Last Refresh
+          </span>
+          <span class="freshness-source-time">${fetchTime}</span>
+        </li>
+      `;
+    }
+
+    for (const [category, categoryAgents] of Object.entries(categories)) {
+      const activeInCategory = categoryAgents.filter(a => agents.includes(a));
+      if (activeInCategory.length > 0) {
+        html += `
+          <li class="freshness-category">
+            <span class="freshness-source-name">
+              <span class="source-dot"></span>
+              ${category}
+            </span>
+            <span class="freshness-source-time">${activeInCategory.length}</span>
+          </li>
+        `;
+      }
+    }
+
+    freshnessSources.innerHTML = html;
+  }
+}
+
+function startFreshnessTimer() {
+  if (freshnessTimer) return;
+  // Update display every minute
+  freshnessTimer = setInterval(() => {
+    renderFreshness();
+  }, 60000);
+}
+
+async function refreshAllData() {
+  if (!freshnessRefreshBtn) return;
+
+  freshnessRefreshBtn.classList.add("refreshing");
+  freshnessRefreshBtn.disabled = true;
+
+  try {
+    // Trigger recommendation reload which re-queries all sources
+    await loadRecommendations(true);
+    // Reload freshness data
+    await loadDataFreshness();
+  } catch (err) {
+    console.error("[Freshness] Refresh error:", err);
+  } finally {
+    freshnessRefreshBtn.classList.remove("refreshing");
+    freshnessRefreshBtn.disabled = false;
+  }
+}
+
+// Freshness dropdown toggle
+freshnessChip?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  freshnessDropdown?.classList.toggle("hidden");
+});
+
+// Close dropdown when clicking outside
+document.addEventListener("click", (e) => {
+  if (freshnessDropdown && !freshnessDropdown.classList.contains("hidden")) {
+    if (!e.target.closest(".data-freshness")) {
+      freshnessDropdown.classList.add("hidden");
+    }
+  }
+});
+
+// Refresh button
+freshnessRefreshBtn?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  refreshAllData();
+});
+
+// Initialize freshness on load
+if (freshnessChip) {
+  loadDataFreshness();
+  startFreshnessTimer();
 }

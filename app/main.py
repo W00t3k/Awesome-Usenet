@@ -18,6 +18,7 @@ from urllib.parse import quote, urljoin
 from dotenv import load_dotenv, set_key
 from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse
+from starlette.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
@@ -27,7 +28,6 @@ from app.agents.criterion_agent import CriterionAgent
 from app.agents.drunkenslug_agent import DrunkenSlugAgent
 from app.agents.oscar_agent import OscarAgent
 from app.agents.plex_agent import PlexAgent
-from app.agents.preference_agent import PreferenceAgent
 from app.agents.rogerebert_agent import RogerEbertAgent
 from app.agents.releases_agent import ReleasesAgent
 from app.agents.rottentomatoes_agent import RottenTomatoesAgent
@@ -63,6 +63,7 @@ from app.agents.film_noir_agent import FilmNoirAgent
 from app.agents.neon_agent import NeonAgent
 from app.clients.http_client import HTTPClient
 from app.clients.ollama_client import OllamaClient
+from app.clients.llm_client import UnifiedLLMClient
 from app.clients.plex_client import PlexClient
 from app.clients.poster_lookup_client import PosterLookupClient
 from app.clients.radarr_client import RadarrClient
@@ -71,7 +72,7 @@ from app.clients.releases_client import ReleasesClient
 from app.clients.rottentomatoes_client import RottenTomatoesClient
 from app.clients.tmdb_client import TMDBClient
 from app.clients.usenet_client import UsenetClient
-from app.config import settings
+from app.config import limits, settings
 from app.models import (
     FeedbackInput,
     FeedbackRow,
@@ -91,6 +92,7 @@ from app.services.plex_channel_schedule import PlexChannelScheduleService
 from app.services.plex_station import PlexStationService
 from app.services.recommender import Recommender
 from app.services.swarm import SwarmOrchestrator
+from app.services.usenet_parser import parse_release
 
 base_dir = Path(__file__).resolve().parent
 project_root = base_dir.parent
@@ -207,6 +209,13 @@ class UsenetDownloadBulkRequest(BaseModel):
     items: list[UsenetDownloadItem]
 
 
+class RagLikesQueryRequest(BaseModel):
+    user_id: str = "default"
+    query: str
+    top_k: int = 8
+    include_summary: bool = True
+
+
 def _ensure_env_file() -> None:
     if env_path.exists():
         return
@@ -287,6 +296,7 @@ def _build_runtime() -> tuple[MemoryStore, SwarmOrchestrator]:
         OscarAgent(
             dataset_path=project_root / "data/oscars_best_picture.json",
             memory_store=memory_store,
+            timeout_seconds=settings.source_timeout_seconds,
         ),
         CriterionAgent(
             dataset_path=project_root / "data/criterion_collection.json",
@@ -327,7 +337,6 @@ def _build_runtime() -> tuple[MemoryStore, SwarmOrchestrator]:
             api_key=settings.drunkenslug_api_key,
             timeout_seconds=settings.source_timeout_seconds,
         ),
-        PreferenceAgent(memory_store=memory_store),
         # New swarm agents
         IMDbTop250Agent(
             dataset_path=project_root / "data/imdb_top250.json",
@@ -443,17 +452,29 @@ def _build_runtime() -> tuple[MemoryStore, SwarmOrchestrator]:
     poster_lookup_client = PosterLookupClient(
         timeout_seconds=settings.source_timeout_seconds,
         tmdb_api_key=settings.tmdb_api_key,
+        memory_store=memory_store,  # Phase 3: Persist poster cache to SQLite
     )
     tmdb_client = (
         TMDBClient(api_key=settings.tmdb_api_key, timeout_seconds=settings.source_timeout_seconds)
         if settings.tmdb_api_key
         else None
     )
+    # Unified LLM client: Groq Cloud (fast) with Ollama fallback
+    llm_client = UnifiedLLMClient(
+        groq_api_key=settings.groq_api_key,
+        groq_model=settings.groq_model,
+        ollama_base_url=settings.ollama_base_url,
+        ollama_model=settings.ollama_model,
+    )
+    if llm_client.available:
+        logger.info(f"LLM provider: {llm_client.provider}")
     swarm = SwarmOrchestrator(
         agents=agents,
         recommender=recommender,
         poster_lookup_client=poster_lookup_client,
         tmdb_client=tmdb_client,
+        llm_client=llm_client if llm_client.available else None,
+        memory_store=memory_store,
     )
     return memory_store, swarm
 
@@ -506,9 +527,15 @@ async def _run_plex_channel_scheduler_loop() -> None:
             continue
 
 
+import time
+
+_app_start_time: float = 0.0
+
+
 @app.on_event("startup")
 async def _on_startup() -> None:
-    global plex_channel_scheduler_task
+    global plex_channel_scheduler_task, _app_start_time
+    _app_start_time = time.time()
     plex_channel_scheduler_stop.clear()
     if plex_channel_scheduler_task is None or plex_channel_scheduler_task.done():
         plex_channel_scheduler_task = asyncio.create_task(_run_plex_channel_scheduler_loop())
@@ -516,14 +543,31 @@ async def _on_startup() -> None:
 
 @app.on_event("shutdown")
 async def _on_shutdown() -> None:
+    """Graceful shutdown with proper cleanup."""
     global plex_channel_scheduler_task
+    logger.info("Initiating graceful shutdown...")
+
+    # Stop background scheduler
     plex_channel_scheduler_stop.set()
     task = plex_channel_scheduler_task
-    if task is None:
-        return
-    with contextlib.suppress(asyncio.CancelledError):
-        await task
-    plex_channel_scheduler_task = None
+    if task is not None:
+        logger.info("Waiting for scheduler task to complete...")
+        with contextlib.suppress(asyncio.CancelledError):
+            try:
+                await asyncio.wait_for(task, timeout=10.0)
+            except TimeoutError:
+                logger.warning("Scheduler task did not complete in time, cancelling...")
+                task.cancel()
+        plex_channel_scheduler_task = None
+
+    # Phase 4: Close shared HTTP client
+    from app.clients.http_client import close_shared_client
+    await close_shared_client()
+
+    # Allow in-flight requests to complete (brief pause)
+    await asyncio.sleep(0.5)
+
+    logger.info("Shutdown complete")
 
 
 async def _ollama_is_connected(base_url: str, model: str) -> bool:
@@ -606,6 +650,8 @@ def _movie_source_keys(movie: MovieCandidate, agent_name: str) -> set[str]:
         keys.add("nzbgeek")
     if "drunkenslug" in tags:
         keys.add("drunkenslug")
+    if "criterion-release" in tags:
+        keys.add("criterion")
     if movie.available_on_usenet:
         keys.add("usenet")
     if movie.available_on_plex:
@@ -882,6 +928,7 @@ async def _enrich_usenet_posters(items: list[dict], max_items: int = 60) -> None
     poster_client = PosterLookupClient(
         timeout_seconds=settings.source_timeout_seconds,
         tmdb_api_key=settings.tmdb_api_key,
+        memory_store=memory_store,  # Phase 3: Use shared poster cache
     )
     semaphore = asyncio.Semaphore(8)
 
@@ -1079,7 +1126,7 @@ async def tv_page(request: Request) -> HTMLResponse:
 @app.get("/api/recommendations", response_model=RecommendationResponse)
 async def get_recommendations(
     user_id: str = Query(default="default"),
-    count: int = Query(default=200, ge=1, le=1000),
+    count: int = Query(default=200, ge=1, le=limits.recommendations_max),
     sort: str | None = Query(default=None),
     sources: str | None = Query(default=None),
     release_from: str | None = Query(default=None),
@@ -1102,6 +1149,113 @@ async def get_recommendations(
         year_from=year_from,
         year_to=year_to,
     )
+
+
+@app.get("/api/recommendations/stream")
+async def stream_recommendations(
+    user_id: str = Query(default="default"),
+    count: int = Query(default=200, ge=1, le=limits.recommendations_max),
+) -> StreamingResponse:
+    """Stream agent updates as Server-Sent Events for real-time UI updates."""
+    async def event_generator():
+        # First, send cached recommendations immediately if available
+        cached = swarm.get_cached_recommendations(user_id, count)
+        if cached:
+            yield f"event: cached\ndata: {json.dumps({'count': len(cached.recommendations), 'source': 'cache'})}\n\n"
+
+        # Then stream agent updates as they complete
+        async for update in swarm.stream_agent_updates(user_id, count):
+            yield f"event: agent\ndata: {json.dumps(update)}\n\n"
+
+        # Final complete event
+        yield f"event: complete\ndata: {json.dumps({'status': 'done'})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.get("/api/movie-of-the-day")
+async def get_movie_of_the_day(user_id: str = Query(default="default")) -> dict:
+    """Fast endpoint returning a single featured movie from cached/static data."""
+    import hashlib
+
+    # Use today's date to pick a consistent "movie of the day"
+    today_seed = date.today().isoformat()
+    seed_hash = int(hashlib.md5(today_seed.encode()).hexdigest(), 16)
+
+    # Try to get from Oscar winners (always available, no network calls)
+    try:
+        oscar_data_path = project_root / "data/oscars_best_picture.json"
+        if oscar_data_path.exists():
+            oscar_movies = json.loads(oscar_data_path.read_text())
+            if oscar_movies:
+                movie = oscar_movies[seed_hash % len(oscar_movies)]
+                title = movie.get("winner") or movie.get("title", "Unknown")
+                return {
+                    "ok": True,
+                    "movie": {
+                        "title": title,
+                        "year": movie.get("year"),
+                        "poster_url": movie.get("poster_url"),
+                        "overview": movie.get("overview", f"Oscar Best Picture Winner {movie.get('year')}"),
+                        "genres": movie.get("genres", ["Drama"]),
+                        "source": "Oscar Best Picture Winner",
+                        "tagline": "Today's Featured Film",
+                        "nominees": movie.get("nominees", []),
+                    },
+                }
+    except Exception:
+        pass
+
+    # Fallback to Criterion if Oscar fails
+    try:
+        criterion_path = project_root / "data/criterion_collection.json"
+        if criterion_path.exists():
+            criterion_movies = json.loads(criterion_path.read_text())
+            if criterion_movies:
+                movie = criterion_movies[seed_hash % len(criterion_movies)]
+                return {
+                    "ok": True,
+                    "movie": {
+                        "title": movie.get("title", "Unknown"),
+                        "year": movie.get("year"),
+                        "poster_url": movie.get("poster_url"),
+                        "overview": movie.get("overview", ""),
+                        "genres": movie.get("genres", []),
+                        "source": "Criterion Collection",
+                        "tagline": "Today's Featured Film",
+                    },
+                }
+    except Exception:
+        pass
+
+    return {"ok": False, "movie": None}
+
+
+@app.get("/api/cache/stats")
+async def get_cache_stats() -> dict:
+    """Get current cache statistics for performance monitoring."""
+    return {
+        "ok": True,
+        "swarm": swarm.get_cache_stats(),
+    }
+
+
+@app.post("/api/cache/clear")
+async def clear_caches() -> dict:
+    """Clear all recommendation and agent caches (forces fresh data on next request)."""
+    cleared = swarm.clear_caches()
+    return {
+        "ok": True,
+        "cleared": cleared,
+    }
 
 
 @app.get("/api/moods")
@@ -1152,14 +1306,14 @@ async def infer_moods_for_user(user_id: str) -> dict:
 async def get_movies_by_year(
     year: int,
     page: int = Query(default=1, ge=1),
-    per_page: int = Query(default=50, ge=1, le=200),
+    per_page: int = Query(default=50, ge=1, le=limits.max_page_size),
 ) -> dict:
     """Get ALL movies from TMDB for a specific year."""
-    if year < 1888 or year > 2030:
+    if year < limits.min_year or year > limits.get_max_year():
         return {"ok": False, "error": "Invalid year", "movies": [], "total": 0}
 
-    # Fetch all movies for year (paginated at TMDB level)
-    all_movies = await swarm.fetch_movies_for_year(year, max_pages=10)
+    # Fetch all movies for year (paginated at TMDB level, uses limits.tmdb_max_pages)
+    all_movies = await swarm.fetch_movies_for_year(year)
 
     # Apply local pagination
     start_idx = (page - 1) * per_page
@@ -1192,7 +1346,7 @@ async def get_movies_by_year(
 async def get_mood_recommendations(
     mood_name: str,
     user_id: str = Query(default="default"),
-    count: int = Query(default=24, ge=1, le=500),
+    count: int = Query(default=24, ge=1, le=limits.recommendations_max),
     year_from: int | None = Query(default=None),
     year_to: int | None = Query(default=None),
 ) -> dict:
@@ -1436,12 +1590,11 @@ Example: 0, 3, 7, 12
 Selected movies:"""
 
     try:
-        # Use larger model if available
-        model = "llama3.1:8b" if "llama3.1:8b" in settings.ollama_model or settings.ollama_model == "llama3.2:1b" else settings.ollama_model
+        # Respect the currently configured model to avoid unexpected slowdowns.
         client = OllamaClient(
             base_url=settings.ollama_base_url,
-            model=model,
-            timeout_seconds=45.0,
+            model=settings.ollama_model,
+            timeout_seconds=30.0,
         )
         response = await client.generate(
             prompt=prompt,
@@ -1475,7 +1628,7 @@ async def get_release_calendar(
     sources: str | None = Query(default=None),
     release_from: str | None = Query(default=None),
     release_to: str | None = Query(default=None),
-    limit: int = Query(default=1500, ge=1, le=5000),
+    limit: int = Query(default=1500, ge=1, le=limits.browse_max),
 ) -> dict:
     required_sources = _parse_sources_query(sources)
     release_date_from = _parse_date_query(release_from)
@@ -1504,7 +1657,7 @@ async def get_release_calendar(
 
 @app.get("/api/usenet/releases")
 async def get_usenet_releases(
-    limit: int = Query(default=250, ge=1, le=2000),
+    limit: int = Query(default=250, ge=1, le=limits.usenet_max),
     q: str | None = Query(default=None),
 ) -> dict:
     return await _crawl_usenet_releases(limit=limit, query=q)
@@ -1737,6 +1890,15 @@ async def _fetch_nzbgeek_movies(limit: int = 100) -> list[dict]:
     if not api_key:
         return []
 
+    async def fetch_new_movies_rss() -> list[dict]:
+        client = UsenetClient(
+            base_url="https://api.nzbgeek.info",
+            api_key=api_key,
+            timeout_seconds=settings.source_timeout_seconds,
+        )
+        movies_url = f"https://api.nzbgeek.info/rss?t=new_movies&limit={limit}&r={api_key}"
+        return await client.movie_rss_feed(rss_url=movies_url, api_key=api_key)
+
     try:
         http = HTTPClient(timeout_seconds=settings.source_timeout_seconds)
         geekseek_url = "https://nzbgeek.info/geekseek.php"
@@ -1769,17 +1931,16 @@ async def _fetch_nzbgeek_movies(limit: int = 100) -> list[dict]:
             return rows[:limit]
 
         logger.warning("NZBGeek geekseek new_movies returned no parsable rows; falling back to RSS.")
-        client = UsenetClient(
-            base_url="https://api.nzbgeek.info",
-            api_key=api_key,
-            timeout_seconds=settings.source_timeout_seconds,
-        )
-        movies_url = f"https://api.nzbgeek.info/rss?t=new_movies&limit={limit}&r={api_key}"
-        return await client.movie_rss_feed(rss_url=movies_url, api_key=api_key)
+        return await fetch_new_movies_rss()
 
     except Exception as exc:
         logger.warning(f"Failed to fetch NZBGeek GeekSeek new_movies: {exc}")
-        return []
+        try:
+            logger.warning("Falling back to NZBGeek rss?t=new_movies after GeekSeek failure.")
+            return await fetch_new_movies_rss()
+        except Exception as rss_exc:
+            logger.warning(f"NZBGeek new_movies RSS fallback failed: {rss_exc}")
+            return []
 
 
 @app.get("/api/usenet/latest")
@@ -1800,10 +1961,15 @@ async def get_usenet_latest(
         feed_source = "nzbgeek_geekseek_new_movies"
 
         if not raw_movies:
-            # Fallback to crawl if direct fetch fails
-            data = await _crawl_usenet_releases(limit=limit * 2, query=None)
-            raw_movies = data.get("items", [])
-            feed_source = "crawl_fallback"
+            return {
+                "ok": True,
+                "releases": [],
+                "count": 0,
+                "checked_at": checked_at,
+                "last_poll_at": last_poll_at,
+                "poll_interval_minutes": settings.usenet_poll_interval_minutes,
+                "feed_source": "nzbgeek_new_movies_unavailable",
+            }
 
         # Create poster client for enrichment
         _poster_client = None
@@ -1811,56 +1977,105 @@ async def get_usenet_latest(
             _poster_client = PosterLookupClient(
                 timeout_seconds=settings.source_timeout_seconds,
                 tmdb_api_key=settings.tmdb_api_key,
+                memory_store=memory_store,  # Phase 3: Use shared poster cache
             )
 
-        # Enrich with posters - use NZBGeek cover first, then TMDB fallback
-        enriched = []
+        # Parse movies first (no network calls)
+        parsed_movies = []
         seen_titles = set()
         for r in raw_movies:
-            raw_title = r.get("title", "")
+            raw_title = str(r.get("release_name") or r.get("title") or "").strip()
             if not raw_title:
                 continue
 
-            # Parse title and year from release name
-            title, year = _extract_release_title_year(raw_title)
+            parsed = parse_release(raw_title)
+            if parsed.is_tv_release:
+                continue
+            title = parsed.title.strip() or _extract_release_title_year(raw_title)[0]
+            year = parsed.year
+            if year is None:
+                _title, fallback_year = _extract_release_title_year(raw_title)
+                year = fallback_year
+                if not title:
+                    title = _title
 
-            # Dedupe by title
+            pub_date = str(r.get("pub_date") or r.get("released_at") or "").strip()
+            has_release_markers = (
+                parsed.quality != "unknown"
+                or parsed.source != "unknown"
+                or parsed.codec != "unknown"
+                or year is not None
+            )
+            if not has_release_markers and not pub_date:
+                continue
+
             title_key = title.lower()
             if title_key in seen_titles:
                 continue
             seen_titles.add(title_key)
 
-            # Use cover from NZBGeek if available
             poster_url = r.get("cover_url") or None
-            overview = ""
-            imdb_id = r.get("imdb_id") or None
+            overview = str(r.get("overview") or r.get("description") or r.get("details") or "").strip()
+            official_release_date = str(r.get("official_release_date") or r.get("release_date") or "").strip()
+            if overview:
+                overview = re.sub(r"<[^>]+>", " ", overview)
+                overview = re.sub(r"\s+", " ", overview).strip()
 
-            # Fallback to TMDB if no cover from NZBGeek
-            if not poster_url and _poster_client and title:
-                try:
-                    info = await _poster_client.lookup(title, year)
-                    if info:
-                        poster_url = info.get("poster_url")
-                        overview = info.get("overview", "")
-                except Exception:
-                    pass
-
-            enriched.append({
+            parsed_movies.append({
                 "title": title,
                 "year": year,
                 "poster_url": poster_url,
                 "overview": overview,
+                "official_release_date": official_release_date,
+                "imdb_id": r.get("imdb_id") or None,
+                "pub_date": pub_date,
+                "raw_title": raw_title,
+                "link": r.get("link"),
+                "needs_tmdb": _poster_client and title and (not poster_url or not overview or not official_release_date),
+            })
+            if len(parsed_movies) >= limit:
+                break
+
+        # Parallel TMDB lookups for movies that need enrichment
+        async def enrich_movie(m: dict) -> None:
+            if not m.get("needs_tmdb"):
+                return
+            try:
+                info = await _poster_client.lookup(m["title"], m["year"])
+                if info:
+                    if not m["poster_url"]:
+                        m["poster_url"] = info.get("poster_url")
+                    tmdb_overview = str(info.get("overview") or "").strip()
+                    if tmdb_overview:
+                        m["overview"] = tmdb_overview
+                    if not m["official_release_date"]:
+                        m["official_release_date"] = str(info.get("release_date") or "").strip()
+            except Exception:
+                pass
+
+        await asyncio.gather(*(enrich_movie(m) for m in parsed_movies))
+
+        # Build final enriched list
+        enriched = []
+        for m in parsed_movies:
+            overview = m["overview"]
+            if len(overview) > 900:
+                overview = f"{overview[:897].rstrip()}..."
+            enriched.append({
+                "title": m["title"],
+                "year": m["year"],
+                "poster_url": m["poster_url"],
+                "overview": overview,
                 "quality": "",
                 "size": "",
                 "source": "nzbgeek",
-                "pub_date": r.get("pub_date", ""),
-                "release_name": raw_title,
-                "imdb_id": imdb_id,
-                "link": r.get("link"),
+                "pub_date": m["pub_date"],
+                "nzbgeek_found_at": m["pub_date"] or None,
+                "official_release_date": m["official_release_date"] or None,
+                "release_name": m["raw_title"],
+                "imdb_id": m["imdb_id"],
+                "link": m["link"],
             })
-
-            if len(enriched) >= limit:
-                break
 
         return {
             "ok": True,
@@ -1899,44 +2114,30 @@ async def check_usenet_availability(
         return {"ok": False, "available": False, "message": "NZBGeek API key not configured"}
 
     try:
-        import httpx
+        client = UsenetClient(
+            base_url="https://api.nzbgeek.info",
+            api_key=api_key,
+            timeout_seconds=settings.source_timeout_seconds,
+        )
 
-        # Search NZBGeek for this movie
-        search_query = title
+        search_query = title.strip()
         if year:
-            search_query = f"{title} {year}"
+            search_query = f"{search_query} {year}"
 
-        search_url = f"https://api.nzbgeek.info/api?t=search&cat=2000&q={quote(search_query)}&apikey={api_key}&o=json"
+        rows = await client.movie_search(query=search_query, limit=60)
+        if not rows and year:
+            # Retry once without year to handle mislabeled usenet posts.
+            rows = await client.movie_search(query=title.strip(), limit=60)
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(search_url)
-            if resp.status_code != 200:
-                return {"ok": False, "available": False, "message": f"NZBGeek returned {resp.status_code}"}
-
-            data = resp.json()
-            items = data.get("channel", {}).get("item", [])
-
-            # Check if any results match
-            if items:
-                # Return available with details
-                best_match = items[0] if isinstance(items, list) else items
-                return {
-                    "ok": True,
-                    "available": True,
-                    "result_count": len(items) if isinstance(items, list) else 1,
-                    "title": title,
-                    "year": year,
-                    "checked_at": datetime.now(UTC).isoformat(),
-                }
-            else:
-                return {
-                    "ok": True,
-                    "available": False,
-                    "result_count": 0,
-                    "title": title,
-                    "year": year,
-                    "checked_at": datetime.now(UTC).isoformat(),
-                }
+        result_count = len(rows) if isinstance(rows, list) else 0
+        return {
+            "ok": True,
+            "available": result_count > 0,
+            "result_count": result_count,
+            "title": title,
+            "year": year,
+            "checked_at": datetime.now(UTC).isoformat(),
+        }
 
     except Exception as exc:
         logger.warning(f"Error checking NZBGeek availability: {exc}")
@@ -1999,13 +2200,43 @@ async def get_trailer(title: str = Query(...), year: int | None = Query(default=
 
 
 @app.get("/api/search")
-async def search_movies(q: str = Query(..., min_length=1)) -> dict:
+async def search_movies(q: str = Query(..., min_length=1), ai: bool = Query(default=False)) -> dict:
+    """Search movies - optionally use AI to understand natural language queries."""
+    query = q.strip()
+
+    # If AI mode enabled and Ollama available, enhance the search
+    if ai and settings.ollama_base_url:
+        try:
+            ollama = OllamaClient(
+                base_url=settings.ollama_base_url,
+                model=settings.ollama_model,
+                timeout_seconds=5.0,
+            )
+            # Ask Ollama to extract movie titles or search terms
+            ai_prompt = f"""User is searching for movies with this query: "{query}"
+
+If this is a natural language request (like "movies about time travel" or "something funny with Will Ferrell"),
+respond with 3-5 specific movie title suggestions, one per line.
+
+If this is already a movie title, just respond with that title.
+
+Only respond with movie titles, nothing else."""
+
+            ai_response = await ollama.generate(ai_prompt)
+            if ai_response:
+                # Extract movie titles from AI response
+                ai_titles = [line.strip() for line in ai_response.strip().split('\n') if line.strip()]
+                if ai_titles:
+                    query = ai_titles[0]  # Use first suggestion for TMDB search
+        except Exception:
+            pass  # Fall back to regular search
+
     if not settings.tmdb_api_key:
         return {"ok": False, "results": [], "message": "TMDB not configured"}
 
     try:
         tmdb = TMDBClient(api_key=settings.tmdb_api_key, timeout_seconds=settings.source_timeout_seconds)
-        raw = await tmdb.search_movie(query=q.strip())
+        raw = await tmdb.search_movie(query=query)
         results = []
         for m in raw[:20]:
             poster_path = m.get("poster_path")
@@ -2024,9 +2255,23 @@ async def search_movies(q: str = Query(..., min_length=1)) -> dict:
                 "vote_average": m.get("vote_average"),
                 "release_date": release,
             })
-        return {"ok": True, "results": results}
+        return {"ok": True, "results": results, "query": query}
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "results": [], "message": str(exc)}
+
+
+@app.get("/api/poster")
+async def get_poster(title: str = Query(...), year: int | None = Query(default=None)) -> dict:
+    """Fetch poster and metadata for a movie on-demand."""
+    if not swarm or not swarm._poster_lookup_client:
+        return {"ok": False, "message": "Poster lookup not configured"}
+    try:
+        info = await swarm._poster_lookup_client.lookup(title, year)
+        if info:
+            return {"ok": True, **info}
+        return {"ok": False, "message": "No poster found"}
+    except Exception as exc:
+        return {"ok": False, "message": str(exc)}
 
 
 @app.get("/api/radarr-monitored")
@@ -2211,7 +2456,7 @@ def _human_size(bytes_val: int) -> str:
 
 
 @app.get("/api/download-history")
-async def get_download_history(limit: int = Query(default=40, ge=1, le=200)) -> dict:
+async def get_download_history(limit: int = Query(default=40, ge=1, le=limits.browse_max)) -> dict:
     if not settings.radarr_api_key:
         return {
             "configured": False,
@@ -2428,10 +2673,50 @@ async def get_feedback(user_id: str) -> list[FeedbackRow]:
     return memory_store.recent_feedback(user_id=user_id, limit=100)
 
 
+@app.get("/api/rag/likes/{user_id}")
+async def rag_likes_snapshot(
+    user_id: str,
+    limit: int = Query(default=50, ge=1, le=limits.feedback_max),
+) -> dict:
+    rows = memory_store.recent_feedback(user_id=user_id, limit=limit * 3)
+    liked_rows = [row for row in rows if row.liked][:limit]
+    return {
+        "ok": True,
+        "user_id": user_id,
+        "liked_count": memory_store.liked_feedback_count(user_id),
+        "items": [row.model_dump() for row in liked_rows],
+    }
+
+
+@app.post("/api/rag/likes/query")
+async def rag_query_likes(payload: RagLikesQueryRequest) -> dict:
+    query = payload.query.strip()
+    if not query:
+        return {"ok": False, "message": "Query is required", "matches": []}
+
+    matches = await memory_store.liked_rag_search(
+        user_id=payload.user_id,
+        query=query,
+        top_k=payload.top_k,
+    )
+    summary = None
+    if payload.include_summary:
+        summary = await _llm_summarize_like_matches(query, matches)
+
+    return {
+        "ok": True,
+        "user_id": payload.user_id,
+        "query": query,
+        "liked_count": memory_store.liked_feedback_count(payload.user_id),
+        "matches": matches,
+        "summary": summary,
+    }
+
+
 @app.get("/api/seen/{user_id}", response_model=list[SeenMovieRow])
 async def get_seen_movies(
     user_id: str,
-    limit: int = Query(default=500, ge=1, le=2000),
+    limit: int = Query(default=500, ge=1, le=limits.seen_max),
     q: str | None = Query(default=None),
 ) -> list[SeenMovieRow]:
     return memory_store.list_seen(user_id=user_id, limit=limit, query=q)
@@ -2495,7 +2780,7 @@ async def import_seen_from_plex(
 
 @app.get("/api/plex/library")
 async def plex_library(
-    limit: int = Query(default=600, ge=1, le=2000),
+    limit: int = Query(default=600, ge=1, le=limits.browse_max),
     q: str | None = Query(default=None),
 ) -> dict:
     if not settings.plex_token:
@@ -3112,6 +3397,43 @@ async def _query_usenet_sources(query: str) -> dict[str, list[dict]]:
     return results
 
 
+async def _llm_summarize_like_matches(query: str, matches: list[dict]) -> str | None:
+    if not settings.ollama_base_url or not matches:
+        return None
+    try:
+        client = OllamaClient(
+            base_url=settings.ollama_base_url,
+            model=settings.ollama_model,
+            timeout_seconds=20.0,
+        )
+        sample_lines = []
+        for idx, match in enumerate(matches[:8], start=1):
+            genres = ", ".join(match.get("genres") or [])
+            sample_lines.append(
+                f"{idx}. {match.get('title')} ({match.get('year') or '?'}) | "
+                f"sim={float(match.get('similarity') or 0.0):.3f} | genres={genres or 'n/a'} | "
+                f"note={str(match.get('note') or '')[:80]}"
+            )
+
+        prompt = (
+            f"User taste query: {query}\n\n"
+            "Matched liked movies:\n"
+            + "\n".join(sample_lines)
+            + "\n\nWrite 2 short sentences describing the user's likely taste for this query. "
+            "Be concrete, no fluff."
+        )
+        response = await client.generate(
+            prompt=prompt,
+            system="You are a pragmatic recommendation analyst.",
+        )
+        summary = (response or "").strip()
+        if not summary:
+            return None
+        return summary[:320]
+    except Exception:
+        return None
+
+
 def _format_usenet_results(results: dict[str, list[dict]]) -> str:
     if not any(results.values()):
         return "No results found from any usenet source."
@@ -3137,40 +3459,43 @@ async def ai_chat(payload: AIChatRequest) -> AIChatResponse:
     message = payload.message.strip()
     sources_queried: list[str] = []
 
-    search_terms = None
-    search_keywords = ["search", "find", "look for", "looking for", "any", "have you got", "do you have", "what about"]
-    provider_keywords = ["drunkenslug", "nzbgeek", "usenet", "nzb", "indexer"]
-
+    # Check if this is a usenet/download query vs general movie question
     message_lower = message.lower()
-    is_search_query = any(kw in message_lower for kw in search_keywords)
-    mentions_provider = any(kw in message_lower for kw in provider_keywords)
-
-    if is_search_query or mentions_provider:
-        words = message.split()
-        stop_words = {"hey", "hi", "hello", "drunkenslug", "nzbgeek", "usenet", "can", "you", "do", "have", "any", "search", "find", "for", "the", "a", "an", "is", "there", "what", "about", "got", "looking"}
-        search_terms = " ".join([w for w in words if w.lower().strip("?,!.") not in stop_words])
+    usenet_keywords = ["drunkenslug", "nzbgeek", "usenet", "nzb", "indexer", "download", "available", "can i get"]
+    is_usenet_query = any(kw in message_lower for kw in usenet_keywords)
 
     usenet_context = ""
-    if search_terms:
-        usenet_results = await _query_usenet_sources(search_terms)
-        sources_queried = [k for k, v in usenet_results.items() if v]
-        usenet_context = _format_usenet_results(usenet_results)
+    if is_usenet_query:
+        # Extract search terms for usenet
+        words = message.split()
+        stop_words = {"hey", "hi", "hello", "drunkenslug", "nzbgeek", "usenet", "can", "you", "do", "have", "any", "search", "find", "for", "the", "a", "an", "is", "there", "what", "about", "got", "looking", "download", "available", "get", "i"}
+        search_terms = " ".join([w for w in words if w.lower().strip("?,!.") not in stop_words])
+        if search_terms:
+            usenet_results = await _query_usenet_sources(search_terms)
+            sources_queried = [k for k, v in usenet_results.items() if v]
+            usenet_context = _format_usenet_results(usenet_results)
 
-    system_prompt = """You are a helpful movie assistant for the Majic Movie Selector app.
-You can help users find movies on usenet indexers like DrunkenSlug, NZBGeek, and other Newznab sources.
-When users ask about movie availability, you'll receive search results from the configured indexers.
-Be friendly and conversational. If you have search results, summarize them helpfully.
-If no results were found, suggest the user try different search terms or check their indexer configuration."""
+    # Build system prompt based on query type
+    if is_usenet_query:
+        system_prompt = """You are a helpful movie assistant for the Majic Movie Selector app.
+You help users find movies on usenet indexers like DrunkenSlug, NZBGeek, and other Newznab sources.
+When users ask about movie availability, summarize the search results helpfully.
+Be friendly and concise."""
+    else:
+        system_prompt = """You are a knowledgeable movie expert assistant for the Majic Movie Selector app.
+You have extensive knowledge about movies, actors, directors, genres, and film history.
+When users ask about movies, actors, or recommendations, provide helpful and accurate information.
+Suggest specific movie titles when appropriate. Be conversational and enthusiastic about movies.
+Keep responses concise but informative - aim for 2-4 sentences unless more detail is needed."""
 
     user_prompt = message
     if usenet_context:
         user_prompt = f"""User question: {message}
 
-Here are the search results from the usenet indexers:
-
+Search results from usenet indexers:
 {usenet_context}
 
-Please respond to the user's question based on these results."""
+Summarize these results for the user."""
 
     try:
         client = OllamaClient(
@@ -3187,9 +3512,97 @@ Please respond to the user's question based on these results."""
         )
 
 
+@app.get("/api/health")
+async def health_check() -> dict:
+    """Comprehensive health check for supervisor and monitoring."""
+    checks: dict[str, dict] = {}
+    overall_status = "healthy"
+
+    # Check SQLite database
+    try:
+        memory_store._connect().execute("SELECT 1").fetchone()
+        checks["database"] = {"status": "ok"}
+    except Exception as e:
+        checks["database"] = {"status": "error", "error": str(e)}
+        overall_status = "degraded"
+
+    # Check Ollama LLM
+    try:
+        ollama_ok = await _ollama_is_connected(settings.ollama_base_url, settings.ollama_model)
+        checks["ollama"] = {"status": "ok" if ollama_ok else "unavailable", "model": settings.ollama_model}
+    except Exception as e:
+        checks["ollama"] = {"status": "error", "error": str(e)}
+
+    # Check background scheduler task
+    scheduler_running = plex_channel_scheduler_task is not None and not plex_channel_scheduler_task.done()
+    checks["scheduler"] = {"status": "running" if scheduler_running else "stopped"}
+
+    # Uptime calculation
+    uptime_seconds = time.time() - _app_start_time if _app_start_time > 0 else 0
+
+    return {
+        "status": overall_status,
+        "timestamp": datetime.now(UTC).isoformat(),
+        "uptime_seconds": round(uptime_seconds, 2),
+        "uptime_human": _format_uptime(uptime_seconds),
+        "checks": checks,
+        "limits": {
+            "min_year": limits.min_year,
+            "max_year": limits.get_max_year(),
+            "recommendations_max": limits.recommendations_max,
+        },
+    }
+
+
+def _format_uptime(seconds: float) -> str:
+    """Format uptime in human-readable format."""
+    if seconds < 60:
+        return f"{int(seconds)}s"
+    elif seconds < 3600:
+        return f"{int(seconds // 60)}m {int(seconds % 60)}s"
+    elif seconds < 86400:
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        return f"{hours}h {minutes}m"
+    else:
+        days = int(seconds // 86400)
+        hours = int((seconds % 86400) // 3600)
+        return f"{days}d {hours}h"
+
+
 @app.get("/api/integrations")
 async def integration_status() -> dict:
     return await _integration_status()
+
+
+def _extract_ollama_model_names(models: list[dict]) -> list[str]:
+    names: list[str] = []
+    for model in models:
+        name = str(model.get("name") or model.get("model") or "").strip()
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def _resolve_ollama_model_name(requested_model: str, models: list[dict]) -> str | None:
+    requested = requested_model.strip()
+    if not requested:
+        return None
+
+    names = _extract_ollama_model_names(models)
+    if not names:
+        return None
+
+    requested_lower = requested.lower()
+    for name in names:
+        if name.lower() == requested_lower:
+            return name
+
+    requested_base = requested_lower.split(":")[0]
+    for name in names:
+        if name.lower().split(":")[0] == requested_base:
+            return name
+    return None
 
 
 @app.get("/api/ollama/models")
@@ -3214,10 +3627,51 @@ async def list_ollama_models() -> dict:
 
 class OllamaPullRequest(BaseModel):
     model: str
+    set_active: bool = True
+
+
+class OllamaModelSelectRequest(BaseModel):
+    model: str
+
+
+@app.post("/api/ollama/model")
+async def select_ollama_model(payload: OllamaModelSelectRequest) -> dict:
+    if not settings.ollama_base_url:
+        return {"ok": False, "message": "Ollama not configured"}
+
+    requested_model = payload.model.strip()
+    if not requested_model:
+        return {"ok": False, "message": "Model name required"}
+
+    try:
+        client = OllamaClient(
+            base_url=settings.ollama_base_url,
+            model=settings.ollama_model,
+            timeout_seconds=10.0,
+        )
+        models = await client.list_models()
+        resolved_model = _resolve_ollama_model_name(requested_model, models)
+        if not resolved_model:
+            names = _extract_ollama_model_names(models)
+            preview = ", ".join(names[:6]) if names else "none"
+            return {
+                "ok": False,
+                "message": f"Model '{requested_model}' is not installed. Installed: {preview}",
+            }
+
+        _save_settings({"ollama_model": resolved_model})
+        await _reload_runtime()
+        return {
+            "ok": True,
+            "message": f"Active model set to '{resolved_model}'",
+            "model": resolved_model,
+        }
+    except Exception as exc:
+        return {"ok": False, "message": str(exc)}
 
 
 @app.post("/api/ollama/pull")
-async def pull_ollama_model(payload: OllamaPullRequest, user: AdminUser) -> dict:
+async def pull_ollama_model(payload: OllamaPullRequest) -> dict:
     if not settings.ollama_base_url:
         return {"ok": False, "message": "Ollama not configured"}
 
@@ -3228,13 +3682,42 @@ async def pull_ollama_model(payload: OllamaPullRequest, user: AdminUser) -> dict
         return {"ok": False, "message": "Model name required"}
 
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(300.0)) as client:
+        # Model pulls can take a long time on first download.
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=1800.0, write=1800.0, pool=10.0)) as client:
             response = await client.post(
                 f"{settings.ollama_base_url}/api/pull",
                 json={"name": model_name, "stream": False},
             )
             if response.status_code == 200:
-                return {"ok": True, "message": f"Model '{model_name}' pulled successfully"}
+                resolved_model = model_name
+                try:
+                    tags_response = await client.get(f"{settings.ollama_base_url}/api/tags")
+                    if tags_response.status_code == 200:
+                        tags_payload = tags_response.json()
+                        resolved = _resolve_ollama_model_name(
+                            model_name,
+                            tags_payload.get("models", []) or [],
+                        )
+                        if resolved:
+                            resolved_model = resolved
+                except Exception:
+                    pass
+
+                if payload.set_active:
+                    _save_settings({"ollama_model": resolved_model})
+                    await _reload_runtime()
+                    return {
+                        "ok": True,
+                        "message": f"Model '{resolved_model}' pulled and set as active model",
+                        "model": resolved_model,
+                        "active": True,
+                    }
+                return {
+                    "ok": True,
+                    "message": f"Model '{resolved_model}' pulled successfully",
+                    "model": resolved_model,
+                    "active": False,
+                }
             else:
                 return {"ok": False, "message": f"Failed to pull: {response.text}"}
     except Exception as exc:
@@ -3536,6 +4019,55 @@ async def list_users(user: AdminUser, limit: int = Query(default=100, ge=1, le=5
     return {"ok": True, "users": users}
 
 
+@app.get("/api/data-freshness")
+async def get_data_freshness() -> dict:
+    """Get data freshness status for all sources (public endpoint)."""
+    usenet_job = memory_store.last_sync_job("usenet_poll")
+    oscars_job = memory_store.last_sync_job("oscars")
+    criterion_job = memory_store.last_sync_job("criterion")
+
+    # Find the most recent sync across all sources
+    timestamps = []
+    if usenet_job and usenet_job.get("completed_at"):
+        timestamps.append(usenet_job["completed_at"])
+    if oscars_job and oscars_job.get("completed_at"):
+        timestamps.append(oscars_job["completed_at"])
+    if criterion_job and criterion_job.get("completed_at"):
+        timestamps.append(criterion_job["completed_at"])
+
+    most_recent = max(timestamps) if timestamps else None
+
+    # Get agent count from swarm
+    agent_count = len(swarm._agents) if swarm else 0
+    agent_names = [a.name for a in swarm._agents] if swarm else []
+
+    return {
+        "ok": True,
+        "most_recent": most_recent,
+        "swarm": {
+            "agent_count": agent_count,
+            "agents": agent_names,
+        },
+        "sources": {
+            "usenet": {
+                "last_sync": usenet_job["completed_at"] if usenet_job else None,
+                "status": usenet_job["status"] if usenet_job else None,
+                "interval_minutes": settings.usenet_poll_interval_minutes,
+            },
+            "oscars": {
+                "last_sync": oscars_job["completed_at"] if oscars_job else None,
+                "status": oscars_job["status"] if oscars_job else None,
+                "items": oscars_job["items_processed"] if oscars_job else 0,
+            },
+            "criterion": {
+                "last_sync": criterion_job["completed_at"] if criterion_job else None,
+                "status": criterion_job["status"] if criterion_job else None,
+                "items": criterion_job["items_processed"] if criterion_job else 0,
+            },
+        },
+    }
+
+
 @app.get("/api/admin/catalog-status")
 async def get_catalog_status(user: AuthenticatedUser) -> dict:
     """Get catalog sync status (last sync times)."""
@@ -3553,3 +4085,273 @@ async def get_catalog_status(user: AuthenticatedUser) -> dict:
             "items": criterion_job["items_processed"] if criterion_job else 0,
         },
     }
+
+
+# ===== MCP Tools API =====
+
+
+MCP_TOOLS = [
+    {
+        "name": "recommend_movies",
+        "description": "Get personalized movie recommendations with AI-powered explanations",
+        "icon": "🎬",
+        "color": "#e50914",
+        "params": [
+            {"name": "count", "type": "number", "default": 5, "label": "Number of recommendations"},
+        ],
+    },
+    {
+        "name": "explain_movie",
+        "description": "Get a detailed AI explanation of why a movie is worth watching",
+        "icon": "💡",
+        "color": "#fbbf24",
+        "params": [
+            {"name": "title", "type": "string", "required": True, "label": "Movie title"},
+        ],
+    },
+    {
+        "name": "search_movies",
+        "description": "Search for movies by title, genre, year, or other criteria",
+        "icon": "🔍",
+        "color": "#06b6d4",
+        "params": [
+            {"name": "query", "type": "string", "required": True, "label": "Search query"},
+            {"name": "year_from", "type": "number", "label": "Year from"},
+            {"name": "year_to", "type": "number", "label": "Year to"},
+        ],
+    },
+    {
+        "name": "analyze_taste",
+        "description": "Analyze a user's movie taste based on their feedback history",
+        "icon": "📊",
+        "color": "#8b5cf6",
+        "params": [],
+    },
+    {
+        "name": "movie_deep_dive",
+        "description": "Comprehensive AI analysis of a movie's themes, style, and cultural impact",
+        "icon": "🎯",
+        "color": "#22c55e",
+        "params": [
+            {"name": "title", "type": "string", "required": True, "label": "Movie title"},
+        ],
+    },
+]
+
+
+class MCPInvokeRequest(BaseModel):
+    tool: str
+    arguments: dict = Field(default_factory=dict)
+    user_id: str = "default"
+    provider: str | None = None  # "groq", "ollama", or None (auto)
+
+
+@app.get("/api/mcp/tools")
+async def list_mcp_tools() -> dict:
+    """List available MCP tools."""
+    llm = await _get_llm_client()
+    return {
+        "ok": True,
+        "tools": MCP_TOOLS,
+        "llm_available": llm is not None and llm.available,
+        "llm_provider": llm.provider if llm and llm.available else None,
+        "groq_available": llm.groq_available if llm else False,
+        "ollama_available": llm.ollama_available if llm else False,
+        "ollama_model": settings.ollama_model,
+        "groq_model": settings.groq_model,
+    }
+
+
+async def _get_llm_client(provider: str | None = None) -> UnifiedLLMClient | None:
+    """Get unified LLM client for MCP tools."""
+    try:
+        return UnifiedLLMClient(
+            groq_api_key=settings.groq_api_key,
+            groq_model=settings.groq_model,
+            ollama_base_url=settings.ollama_base_url,
+            ollama_model=settings.ollama_model,
+            prefer_provider=provider,
+        )
+    except Exception:
+        return None
+
+
+@app.post("/api/mcp/invoke")
+async def invoke_mcp_tool(payload: MCPInvokeRequest) -> dict:
+    """Invoke an MCP tool and return results."""
+    tool_name = payload.tool
+    args = payload.arguments
+    user_id = payload.user_id
+    provider = payload.provider
+
+    if tool_name == "recommend_movies":
+        return await _mcp_recommend(args, user_id)
+    elif tool_name == "explain_movie":
+        return await _mcp_explain(args, user_id, provider)
+    elif tool_name == "search_movies":
+        return await _mcp_search(args)
+    elif tool_name == "analyze_taste":
+        return await _mcp_analyze_taste(user_id, provider)
+    elif tool_name == "movie_deep_dive":
+        return await _mcp_deep_dive(args, provider)
+    else:
+        return {"ok": False, "error": f"Unknown tool: {tool_name}"}
+
+
+async def _mcp_recommend(args: dict, user_id: str) -> dict:
+    """Get movie recommendations via MCP."""
+    count = min(max(args.get("count", 5), 1), 20)
+    try:
+        response = await swarm.recommend_filtered(
+            user_id=user_id,
+            count=count,
+            sort_mode="score-desc",
+            required_sources=None,
+            release_date_from=None,
+            release_date_to=None,
+        )
+        results = []
+        for rec in response.recommendations[:count]:
+            movie = rec.movie
+            results.append({
+                "title": movie.title,
+                "year": movie.year,
+                "explanation": rec.explanation or "No explanation available",
+                "score": movie.rottentomatoes_score,
+                "genres": movie.genres or [],
+                "available": movie.available_on_usenet,
+                "poster": movie.poster_url,
+            })
+        return {"ok": True, "recommendations": results}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+async def _mcp_explain(args: dict, user_id: str, provider: str | None = None) -> dict:
+    """Generate detailed movie explanation via MCP."""
+    title = args.get("title", "")
+    if not title:
+        return {"ok": False, "error": "Please provide a movie title"}
+
+    llm = await _get_llm_client(provider)
+    if not llm or not llm.available:
+        return {"ok": False, "error": "LLM not available for AI explanations"}
+
+    prompt = f"""Why watch "{title}"? Give a concise 2-3 sentence pitch covering: what makes it special, who would enjoy it, and one standout element. Be specific, not generic."""
+
+    try:
+        response = await llm.generate(prompt, max_tokens=150)
+        return {"ok": True, "title": title, "explanation": response}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+async def _mcp_search(args: dict) -> dict:
+    """Search movies via MCP - uses TMDB directly for speed."""
+    query = args.get("query", "")
+    year = args.get("year_from")  # Use year_from as the year filter
+
+    if not query:
+        return {"ok": False, "error": "Please provide a search query"}
+
+    try:
+        # Use TMDB directly for fast search
+        tmdb = TMDBClient(api_key=settings.tmdb_api_key, timeout_seconds=10.0)
+        results = await tmdb.search_movie(query, year=year)
+
+        matches = []
+        for movie in results[:15]:
+            poster = None
+            if movie.get("poster_path"):
+                poster = f"https://image.tmdb.org/t/p/w500{movie['poster_path']}"
+
+            release_date = movie.get("release_date", "")
+            movie_year = int(release_date[:4]) if release_date and len(release_date) >= 4 else None
+
+            matches.append({
+                "title": movie.get("title", "Unknown"),
+                "year": movie_year,
+                "genres": [],  # TMDB search doesn't return genre names
+                "score": round(movie.get("vote_average", 0) * 10) if movie.get("vote_average") else None,
+                "poster": poster,
+                "overview": movie.get("overview", "")[:100],
+            })
+
+        return {"ok": True, "query": query, "results": matches}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+async def _mcp_analyze_taste(user_id: str, provider: str | None = None) -> dict:
+    """Analyze user taste via MCP."""
+    llm = await _get_llm_client(provider)
+    if not llm or not llm.available:
+        return {"ok": False, "error": "LLM not available for taste analysis"}
+
+    try:
+        feedback = memory_store.recent_feedback(user_id, limit=30)
+        if not feedback:
+            return {"ok": False, "error": f"No feedback history found for user '{user_id}'"}
+
+        liked = [f for f in feedback if f.liked]
+        disliked = [f for f in feedback if not f.liked]
+        liked_titles = [f.title for f in liked[:10]]
+        disliked_titles = [f.title for f in disliked[:5]]
+
+        prompt = f"""Movie taste analysis:
+LIKED: {', '.join(liked_titles) if liked_titles else 'None'}
+DISLIKED: {', '.join(disliked_titles) if disliked_titles else 'None'}
+
+In 3-4 sentences: summarize their taste profile, note patterns, and suggest 2 movies they'd enjoy."""
+
+        response = await llm.generate(prompt, max_tokens=200)
+        return {
+            "ok": True,
+            "user_id": user_id,
+            "liked_count": len(liked),
+            "disliked_count": len(disliked),
+            "analysis": response,
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+async def _mcp_deep_dive(args: dict, provider: str | None = None) -> dict:
+    """Deep dive analysis of a movie via MCP."""
+    title = args.get("title", "")
+    if not title:
+        return {"ok": False, "error": "Please provide a movie title"}
+
+    llm = await _get_llm_client(provider)
+    if not llm or not llm.available:
+        return {"ok": False, "error": "LLM not available for deep analysis"}
+
+    prompt = f"""Provide a comprehensive analysis of the film "{title}".
+
+Structure your response as:
+
+## Overview
+Brief synopsis without major spoilers
+
+## Themes & Ideas
+The deeper themes, social commentary, or philosophical ideas explored
+
+## Craft & Style
+Notable aspects of direction, cinematography, editing, score, performances
+
+## Cultural Impact
+Its place in cinema history, influence, or cultural significance
+
+## Who Should Watch
+The ideal viewer and what mood/mindset suits this film
+
+## Similar Films
+3-5 films with similar appeal and brief explanation why
+
+Be detailed, insightful, and specific. Avoid generic observations."""
+
+    try:
+        response = await llm.generate(prompt)
+        return {"ok": True, "title": title, "analysis": response}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}

@@ -4,20 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{{ app_title }}</title>
-    <link rel="icon" type="image/svg+xml" href="/static/logo.svg" />
+    <link rel="icon" type="image/svg+xml" href="/static/logo.svg?v=20260219e" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@400;600;700;800&family=Outfit:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/static/styles.css?v=20260217h" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260224a" />
   </head>
   <body>
     <div class="app">
       <header class="nav">
         <a href="/" class="nav-brand">
-          <img src="/static/logo.svg" alt="Majic" class="brand-logo" />
+          <img src="/static/logo.svg?v=20260219e" alt="Majic" class="brand-logo" />
           <span class="brand-text">Majic</span>
         </a>
         <nav class="nav-links">
@@ -25,6 +25,24 @@
           <a class="nav-link" href="/tv">TV Station</a>
           <a class="nav-link" href="/usenet">Usenet Releases</a>
           <a class="nav-link" href="/integrations">Integrations</a>
+          <div class="data-freshness" id="data-freshness">
+            <button class="freshness-chip" id="freshness-chip" type="button" title="Data status">
+              <span class="freshness-dot"></span>
+              <span class="freshness-label" id="freshness-label">Loading...</span>
+            </button>
+            <div class="freshness-dropdown hidden" id="freshness-dropdown">
+              <div class="freshness-header">
+                <span>Data Sources</span>
+                <button class="btn btn-sm btn-ghost freshness-refresh-btn" id="freshness-refresh-btn" type="button" title="Refresh all data">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                  </svg>
+                  <span>Refresh</span>
+                </button>
+              </div>
+              <ul class="freshness-sources" id="freshness-sources"></ul>
+            </div>
+          </div>
           <select class="theme-select" id="theme-select" aria-label="Theme">
             <option value="dark">Dark</option>
             <option value="midnight">Midnight</option>
@@ -32,6 +50,13 @@
             <option value="forest">Forest</option>
             <option value="sunset">Sunset</option>
             <option value="light">Light</option>
+            <option value="aurora">Aurora</option>
+            <option value="ember">Ember</option>
+            <option value="slate">Slate</option>
+            <option value="noir">Noir</option>
+            <option value="cobalt">Cobalt</option>
+            <option value="rose">Rose</option>
+            <option value="ice">Ice</option>
           </select>
           <div class="user-menu" id="user-menu">
             <button class="user-avatar-btn" id="login-btn" type="button" title="Sign In">
@@ -48,6 +73,9 @@
       </header>
 
       <div id="radarr-status" class="status-banner"></div>
+      <div id="api-stats" class="api-stats" hidden>
+        <span id="api-stats-text">Loading...</span>
+      </div>
 
       <div class="layout">
         <aside class="sidebar">
@@ -87,7 +115,6 @@
             <div class="card-header">
               <h3>2026 Calendar</h3>
             </div>
-            <div id="calendar-source-filters" class="source-filters" style="margin-bottom: 10px;"></div>
             <div id="release-calendar" class="calendar"></div>
           </section>
 
@@ -107,15 +134,6 @@
                   <span>1900</span>
                   <span>2026</span>
                 </div>
-              </div>
-              <div class="decade-chips">
-                <button type="button" class="decade-chip" data-decade="2020">2020s</button>
-                <button type="button" class="decade-chip" data-decade="2010">2010s</button>
-                <button type="button" class="decade-chip" data-decade="2000">2000s</button>
-                <button type="button" class="decade-chip" data-decade="1990">90s</button>
-                <button type="button" class="decade-chip" data-decade="1980">80s</button>
-                <button type="button" class="decade-chip" data-decade="1970">70s</button>
-                <button type="button" class="decade-chip" data-decade="classic">Classic</button>
               </div>
             </div>
 
@@ -170,6 +188,61 @@
             <p id="monitored-status" class="meta">Loading...</p>
             <ul id="monitored-list" class="download-list"></ul>
           </section>
+
+          <section class="card mcp-card" id="mcp-card">
+            <div class="card-header mcp-header" id="mcp-toggle">
+              <div class="mcp-title">
+                <span class="mcp-icon" aria-hidden="true">⚡</span>
+                <div class="mcp-heading">
+                  <h3>MCP Tools</h3>
+                  <p class="mcp-subtitle">AI-powered analysis</p>
+                </div>
+                <span id="mcp-status" class="mcp-status-badge"></span>
+              </div>
+              <button class="mcp-expand-btn" id="mcp-expand-btn" type="button" title="Toggle MCP panel">
+                <span class="expand-icon">▼</span>
+              </button>
+            </div>
+            <div class="mcp-body" id="mcp-body">
+              <div class="mcp-provider-row">
+                <label for="mcp-provider-select">LLM Provider:</label>
+                <select id="mcp-provider-select" class="mcp-provider-select">
+                  <option value="auto">Auto (fastest)</option>
+                </select>
+              </div>
+              <div class="mcp-tools-grid" id="mcp-tools-grid"></div>
+              <div class="mcp-result" id="mcp-result" hidden>
+                <div class="mcp-result-header">
+                  <span class="mcp-result-title" id="mcp-result-title"></span>
+                  <button type="button" class="mcp-result-close" id="mcp-result-close">×</button>
+                </div>
+                <div class="mcp-result-content" id="mcp-result-content"></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- MCP Tool Modal -->
+          <div class="mcp-modal" id="mcp-modal" hidden>
+            <div class="mcp-modal-backdrop" id="mcp-modal-backdrop"></div>
+            <div class="mcp-modal-dialog">
+              <div class="mcp-modal-header">
+                <span class="mcp-modal-icon" id="mcp-modal-icon"></span>
+                <h3 id="mcp-modal-title"></h3>
+                <button type="button" class="mcp-modal-close" id="mcp-modal-close">×</button>
+              </div>
+              <p class="mcp-modal-desc" id="mcp-modal-desc"></p>
+              <form id="mcp-modal-form" class="mcp-modal-form">
+                <div id="mcp-modal-params"></div>
+                <div class="mcp-modal-actions">
+                  <button type="button" class="btn btn-ghost" id="mcp-modal-cancel">Cancel</button>
+                  <button type="submit" class="btn btn-primary" id="mcp-modal-submit">
+                    <span class="mcp-submit-text">Run</span>
+                    <span class="mcp-submit-spinner" hidden></span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
 
           <section class="card swarm-card" id="swarm-card">
             <div class="card-header">
@@ -247,9 +320,11 @@
           <section class="card">
             <div class="card-header">
               <h2>Recommendations</h2>
+              <span class="loading-indicator" id="rec-loading" style="display: none;">Loading...</span>
               <div class="header-actions">
                 <select id="sort-select" class="theme-select" aria-label="Sort by">
                   <option value="year-desc" selected>Newest First</option>
+                  <option value="random">Shuffle</option>
                   <option value="year-asc">Oldest First</option>
                   <option value="release-upcoming">Upcoming Soonest</option>
                   <option value="release-current">Released Newest</option>
@@ -269,10 +344,10 @@
             </div>
 
             <div class="availability-filters" id="availability-filters">
-              <button type="button" class="availability-toggle active" data-filter="all">
+              <button type="button" class="availability-toggle" data-filter="all">
                 🎥 All
               </button>
-              <button type="button" class="availability-toggle" data-filter="ready">
+              <button type="button" class="availability-toggle active" data-filter="ready">
                 <span class="toggle-icon">⚡</span>
                 Ready
               </button>
@@ -321,13 +396,15 @@
             <p class="meta back-meta"></p>
             <div class="source-origin back-source-origin"></div>
             <ul class="source-links"></ul>
-            <p class="overview"></p>
-            <ul class="reasons"></ul>
-            <div class="trailer-embed"></div>
-            <div class="movie-actions actions">
+            <div class="back-text-scroll">
+              <p class="explanation"></p>
+              <ul class="back-dates"></ul>
+              <p class="overview"></p>
+              <ul class="reasons"></ul>
+            </div>
+            <div class="movie-actions">
               <button type="button" class="btn btn-success like">❤ Like</button>
               <button type="button" class="btn btn-ghost download">▶ Download</button>
-              <button type="button" class="btn btn-ghost dislike">Skip</button>
             </div>
           </div>
         </div>
@@ -346,6 +423,7 @@
             <h2 id="modal-title"></h2>
             <p id="modal-meta" class="meta"></p>
             <div id="modal-score" class="hero-score"></div>
+            <div id="modal-highlights" class="modal-highlights"></div>
 
             <h4>Synopsis</h4>
             <p id="modal-overview" class="hero-summary"></p>
@@ -361,7 +439,6 @@
               <button id="modal-download" class="btn btn-ghost" type="button">▶ Download</button>
               <button id="modal-check-usenet" class="btn btn-ghost btn-check" type="button">🔍 Check Usenet</button>
               <button id="modal-plex-watchlist" class="btn btn-ghost btn-plex" type="button">+ Plex Watchlist</button>
-              <button id="modal-skip" class="btn btn-ghost" type="button">Skip</button>
               <button id="modal-delete" class="btn btn-ghost btn-danger" type="button" style="display:none;">🗑 Delete</button>
             </div>
           </div>
@@ -398,6 +475,6 @@
       </div>
     </div>
 
-    <script src="/static/app.js?v=20260217j" defer></script>
+    <script src="/static/app.js?v=20260224a" defer></script>
   </body>
 </html>
