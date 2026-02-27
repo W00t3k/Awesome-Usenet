@@ -127,8 +127,8 @@ const SOURCE_OPTIONS = [
   { key: "criterion", label: "Criterion" },
 ];
 
-// Initialize with all sources selected
-const homeSourceSelections = new Set(SOURCE_OPTIONS.map((opt) => opt.key));
+// Initialize with Usenet sources selected by default (latest available movies)
+const homeSourceSelections = new Set(["nzbgeek", "drunkenslug"]);
 const calendarSourceSelections = new Set();
 let calendarItems = [];
 let filterDebounceTimer = null;
@@ -3516,9 +3516,10 @@ function clearAllFilters() {
   currentMood = null;
   renderMoodChips();
 
-  // Reset source selections to all
+  // Reset source selections to Usenet (latest available)
   homeSourceSelections.clear();
-  SOURCE_OPTIONS.forEach((opt) => homeSourceSelections.add(opt.key));
+  homeSourceSelections.add("nzbgeek");
+  homeSourceSelections.add("drunkenslug");
   renderHomeSourceFilters();
 
   loadRecommendations();
