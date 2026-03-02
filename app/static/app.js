@@ -67,6 +67,180 @@ const DOWNLOAD_HISTORY_CLEAR_KEY = "majic_download_history_cleared_at";
 const AUTH_TOKEN_KEY = "majic_auth_token";
 const AUTH_USER_KEY = "majic_auth_user";
 
+// ===== Debug Console =====
+const debugPanel = document.getElementById("debug-panel");
+const debugLog = document.getElementById("debug-log");
+const debugBtn = document.getElementById("debug-btn");
+const debugCloseBtn = document.getElementById("debug-close-btn");
+const debugClearBtn = document.getElementById("debug-clear-btn");
+const debugErrorCount = document.getElementById("debug-error-count");
+const debugStats = document.getElementById("debug-stats");
+const debugAutoscroll = document.getElementById("debug-autoscroll");
+
+let debugEntries = [];
+let debugFilter = "all";
+let debugErrorTotal = 0;
+
+function debugLog_(type, message, detail = null) {
+  const entry = {
+    time: new Date().toLocaleTimeString("en-US", { hour12: false }),
+    type,
+    message,
+    detail,
+  };
+  debugEntries.push(entry);
+  if (debugEntries.length > 500) debugEntries.shift(); // Keep last 500
+
+  if (type === "error") {
+    debugErrorTotal++;
+    if (debugErrorCount) {
+      debugErrorCount.textContent = debugErrorTotal;
+      debugErrorCount.hidden = false;
+    }
+  }
+
+  renderDebugEntry(entry);
+  updateDebugStats();
+}
+
+function renderDebugEntry(entry) {
+  if (!debugLog) return;
+  if (debugFilter !== "all" && entry.type !== debugFilter) return;
+
+  const div = document.createElement("div");
+  div.className = "debug-entry";
+  div.dataset.type = entry.type;
+  div.innerHTML = `
+    <span class="debug-time">${entry.time}</span>
+    <span class="debug-type ${entry.type}">${entry.type}</span>
+    <span class="debug-message">${entry.message}${entry.detail ? `<div class="debug-detail">${entry.detail}</div>` : ""}</span>
+  `;
+  debugLog.appendChild(div);
+
+  if (debugAutoscroll?.checked) {
+    debugLog.scrollTop = debugLog.scrollHeight;
+  }
+}
+
+function renderAllDebugEntries() {
+  if (!debugLog) return;
+  debugLog.innerHTML = "";
+  debugEntries.forEach(entry => {
+    if (debugFilter === "all" || entry.type === debugFilter) {
+      renderDebugEntry(entry);
+    }
+  });
+}
+
+function updateDebugStats() {
+  if (debugStats) {
+    const filtered = debugFilter === "all" ? debugEntries.length : debugEntries.filter(e => e.type === debugFilter).length;
+    debugStats.textContent = `${filtered} events`;
+  }
+}
+
+// Debug panel toggle
+if (debugBtn) {
+  debugBtn.addEventListener("click", () => {
+    debugPanel?.classList.toggle("open");
+  });
+}
+
+if (debugCloseBtn) {
+  debugCloseBtn.addEventListener("click", () => {
+    debugPanel?.classList.remove("open");
+  });
+}
+
+if (debugClearBtn) {
+  debugClearBtn.addEventListener("click", () => {
+    debugEntries = [];
+    debugErrorTotal = 0;
+    if (debugErrorCount) {
+      debugErrorCount.textContent = "0";
+      debugErrorCount.hidden = true;
+    }
+    if (debugLog) debugLog.innerHTML = "";
+    updateDebugStats();
+  });
+}
+
+// Debug filter buttons
+document.querySelectorAll(".debug-filter").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".debug-filter").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    debugFilter = btn.dataset.filter;
+    renderAllDebugEntries();
+    updateDebugStats();
+  });
+});
+
+// Keyboard shortcut: Ctrl+` to toggle debug
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey && e.key === "`") {
+    e.preventDefault();
+    debugPanel?.classList.toggle("open");
+  }
+});
+
+// Nav menu dropdown
+const navMenu = document.getElementById("nav-menu");
+const navMenuBtn = document.getElementById("nav-menu-btn");
+if (navMenuBtn && navMenu) {
+  navMenuBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    navMenu.classList.toggle("open");
+  });
+  document.addEventListener("click", (e) => {
+    if (!navMenu.contains(e.target)) {
+      navMenu.classList.remove("open");
+    }
+  });
+}
+
+// Override fetch to log API calls
+const originalFetch = window.fetch;
+window.fetch = async function(...args) {
+  const url = typeof args[0] === "string" ? args[0] : args[0]?.url || "unknown";
+  const method = args[1]?.method || "GET";
+  const shortUrl = url.split("?")[0].replace(window.location.origin, "");
+
+  const startTime = performance.now();
+  debugLog_("api", `${method} ${shortUrl}`, url.includes("?") ? url.split("?")[1] : null);
+
+  try {
+    const response = await originalFetch.apply(this, args);
+    const duration = Math.round(performance.now() - startTime);
+
+    if (!response.ok) {
+      debugLog_("error", `${method} ${shortUrl} failed: ${response.status}`, `${response.statusText} (${duration}ms)`);
+    } else {
+      debugLog_("success", `${method} ${shortUrl}`, `${response.status} (${duration}ms)`);
+    }
+
+    return response;
+  } catch (err) {
+    const duration = Math.round(performance.now() - startTime);
+    debugLog_("error", `${method} ${shortUrl} error`, `${err.message} (${duration}ms)`);
+    throw err;
+  }
+};
+
+// Log agent activity helper
+function logAgent(agentName, action, detail = null) {
+  debugLog_("agent", `[${agentName}] ${action}`, detail);
+}
+
+// Log errors
+window.addEventListener("error", (e) => {
+  debugLog_("error", `JS Error: ${e.message}`, `${e.filename}:${e.lineno}`);
+});
+
+window.addEventListener("unhandledrejection", (e) => {
+  debugLog_("error", `Unhandled Promise: ${e.reason?.message || e.reason}`, null);
+});
+
 // Just Added elements
 const justAddedSection = document.getElementById("just-added-section");
 const justAddedGrid = document.getElementById("just-added-grid");
@@ -1673,7 +1847,7 @@ function renderSwarm(agents) {
   if (previewEl) {
     previewEl.innerHTML = agents.map(a => {
       const cls = (a.status === "success" || a.status === "cached") ? "success" : a.status === "skipped" ? "skipped" : "error";
-      return `<div class="agent-dot ${cls}" title="${a.agent}"></div>`;
+      return `<div class="agent-dot ${cls}" title="${a.agent}: ${a.item_count || 0} movies"></div>`;
     }).join("");
   }
 
@@ -1803,15 +1977,24 @@ function renderSwarmVisualization(agents) {
     const nodeCircle = svg("circle", { cx: x, cy: y, r: nodeSize, fill: color, opacity: "0.95", style: "pointer-events: none;" });
     swarmMap.appendChild(nodeCircle);
 
-    // Label (non-interactive)
+    // Label (non-interactive) - agent name
     const shortName = agent.agent.length > 8 ? agent.agent.slice(0, 7) + "…" : agent.agent;
     const label = svg("text", {
-      x, y: y + 4, "text-anchor": "middle", fill: "#fff",
+      x, y: y - 2, "text-anchor": "middle", fill: "#fff",
       "font-size": ringIndex === 0 ? "9" : "8", "font-family": "Sora, sans-serif", "font-weight": "500",
       style: "pointer-events: none;",
     });
     label.textContent = shortName;
     swarmMap.appendChild(label);
+
+    // Movie count below name
+    const countLabel = svg("text", {
+      x, y: y + 10, "text-anchor": "middle", fill: "rgba(255,255,255,0.8)",
+      "font-size": ringIndex === 0 ? "8" : "7", "font-family": "Sora, sans-serif", "font-weight": "400",
+      style: "pointer-events: none;",
+    });
+    countLabel.textContent = agent.item_count || 0;
+    swarmMap.appendChild(countLabel);
 
     // Clickable hit area (on top, handles all interaction)
     const hitArea = svg("circle", {
@@ -1952,6 +2135,28 @@ document.addEventListener("keydown", (e) => {
     swarmModal.classList.remove("open");
   }
 });
+
+// Swarm refresh button - clears cache and reloads all agents
+const swarmRefreshBtn = document.getElementById("swarm-refresh-btn");
+if (swarmRefreshBtn) {
+  swarmRefreshBtn.addEventListener("click", async (e) => {
+    e.stopPropagation(); // Don't open the modal
+    swarmRefreshBtn.disabled = true;
+    swarmRefreshBtn.classList.add("spinning");
+
+    try {
+      // Clear server-side caches
+      await fetch("/api/cache/clear", { method: "POST" });
+      // Reload recommendations with fresh data
+      await loadRecommendations();
+    } catch (err) {
+      console.error("Failed to refresh agents:", err);
+    } finally {
+      swarmRefreshBtn.disabled = false;
+      swarmRefreshBtn.classList.remove("spinning");
+    }
+  });
+}
 
 function hashCode(input) {
   let hash = 0;
@@ -3312,16 +3517,23 @@ function getMovieAvailabilityStatus(movie) {
 
   // Check if movie is unreleased first
   const isUnreleased = tagsLower.includes("unreleased");
-  // "upcoming" alone doesn't mean unreleased - many "upcoming" movies are now released
-  // Only treat as unreleased if explicitly marked or if it has a future release date
   const releaseDate = movie.release_date ? new Date(movie.release_date) : null;
   const isFutureRelease = releaseDate && releaseDate > new Date();
 
+  // Check year - if movie year is in the past, it's been released
+  const currentYear = new Date().getFullYear();
+  const movieYear = movie.year || 0;
+  const isReleasedByYear = movieYear > 0 && movieYear < currentYear;
+
   if (isUnreleased || isFutureRelease) return "unreleased";
 
-  // Check if movie is ready/available
+  // If movie has been released (by year), assume it's available
+  // Most released movies are available on usenet/torrents
+  if (isReleasedByYear) return "ready";
+
+  // Check explicit availability flags for current year movies
   const isUsenet = movie.available_on_usenet ||
-    tagsLower.some(t => ["nzbgeek", "nzbgeek-rss", "drunkenslug", "usenet", "2160p", "1080p", "720p"].includes(t));
+    tagsLower.some(t => ["nzbgeek", "nzbgeek-rss", "drunkenslug", "usenet"].includes(t));
   const isPlex = movie.available_on_plex || tagsLower.includes("plex");
   const isRadarr = movie.available_on_radarr;
   const isNowPlaying = tagsLower.includes("now-playing");

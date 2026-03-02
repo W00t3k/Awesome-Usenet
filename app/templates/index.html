@@ -11,65 +11,76 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@400;600;700;800&family=Outfit:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/static/styles.css?v=20260228k" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260301j" />
   </head>
   <body>
     <div class="app">
       <header class="nav">
-        <a href="/" class="nav-brand">
-          <img src="/static/logo.svg?v=20260219e" alt="Majic" class="brand-logo" />
-          <span class="brand-text">Majic</span>
-        </a>
-        <nav class="nav-links">
-          <a class="nav-link active" href="/">Recommendations</a>
-          <a class="nav-link" href="/tv">TV Station</a>
-          <a class="nav-link" href="/usenet">Usenet Releases</a>
-          <a class="nav-link" href="/integrations">Integrations</a>
-          <div class="data-freshness" id="data-freshness">
-            <button class="freshness-chip" id="freshness-chip" type="button" title="Data status">
-              <span class="freshness-dot"></span>
-              <span class="freshness-label" id="freshness-label">Loading...</span>
-            </button>
-            <div class="freshness-dropdown hidden" id="freshness-dropdown">
-              <div class="freshness-header">
-                <span>Data Sources</span>
-                <button class="btn btn-sm btn-ghost freshness-refresh-btn" id="freshness-refresh-btn" type="button" title="Refresh all data">
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-                  </svg>
-                  <span>Refresh</span>
-                </button>
-              </div>
-              <ul class="freshness-sources" id="freshness-sources"></ul>
+        <div class="nav-top">
+          <a href="/" class="nav-brand">
+            <img src="/static/logo.svg?v=20260219e" alt="Majic" class="brand-logo" />
+            <span class="brand-text">Majic</span>
+          </a>
+        </div>
+        <div class="nav-menu" id="nav-menu">
+          <button class="nav-menu-btn" id="nav-menu-btn" type="button">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+          </button>
+          <div class="nav-dropdown" id="nav-dropdown">
+            <a class="nav-dropdown-item active" href="/">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/></svg>
+              <span>Movies</span>
+            </a>
+            <a class="nav-dropdown-item" href="/usenet">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+              <span>NZB Releases</span>
+            </a>
+            <a class="nav-dropdown-item" href="/integrations">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+              <span>Integrations</span>
+            </a>
+            <div class="nav-dropdown-divider"></div>
+            <div class="nav-dropdown-item theme-row">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
+              <select class="theme-select-inline" id="theme-select" aria-label="Theme">
+                <option value="dark">Dark</option>
+                <option value="midnight">Midnight</option>
+                <option value="ocean">Ocean</option>
+                <option value="forest">Forest</option>
+                <option value="sunset">Sunset</option>
+                <option value="light">Light</option>
+                <option value="aurora">Aurora</option>
+                <option value="ember">Ember</option>
+                <option value="slate">Slate</option>
+                <option value="noir">Noir</option>
+                <option value="cobalt">Cobalt</option>
+                <option value="rose">Rose</option>
+                <option value="ice">Ice</option>
+              </select>
             </div>
-          </div>
-          <select class="theme-select" id="theme-select" aria-label="Theme">
-            <option value="dark">Dark</option>
-            <option value="midnight">Midnight</option>
-            <option value="ocean">Ocean</option>
-            <option value="forest">Forest</option>
-            <option value="sunset">Sunset</option>
-            <option value="light">Light</option>
-            <option value="aurora">Aurora</option>
-            <option value="ember">Ember</option>
-            <option value="slate">Slate</option>
-            <option value="noir">Noir</option>
-            <option value="cobalt">Cobalt</option>
-            <option value="rose">Rose</option>
-            <option value="ice">Ice</option>
-          </select>
-          <div class="user-menu" id="user-menu">
-            <button class="user-avatar-btn" id="login-btn" type="button" title="Sign In">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-              </svg>
+            <div class="nav-dropdown-divider"></div>
+            <button class="nav-dropdown-item" id="debug-btn" type="button">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M20 19V7H4v12h16m0-16c1.11 0 2 .89 2 2v14c0 1.11-.89 2-2 2H4c-1.11 0-2-.89-2-2V5c0-1.11.89-2 2-2h16M7.5 13L11 9.5 7.5 6l1.42-1.42L13.34 9.5l-4.42 4.42L7.5 13m5 2h5v2h-5v-2z"/></svg>
+              <span>Debug Console</span>
+              <span class="debug-error-count" id="debug-error-count" hidden>0</span>
             </button>
-            <div class="user-dropdown hidden" id="user-dropdown">
-              <span class="user-name" id="user-name"></span>
-              <button class="btn btn-ghost btn-sm" id="logout-btn" type="button">Sign Out</button>
-            </div>
           </div>
-        </nav>
+        </div>
+        <!-- Hidden elements for JS compatibility -->
+        <div id="data-freshness" style="display:none;">
+          <span id="freshness-label"></span>
+          <div id="freshness-dropdown" class="hidden">
+            <button id="freshness-refresh-btn" type="button"></button>
+            <ul id="freshness-sources"></ul>
+          </div>
+        </div>
+        <div id="user-menu" style="display:none;">
+          <button id="login-btn" type="button"></button>
+          <div id="user-dropdown" class="hidden">
+            <span id="user-name"></span>
+            <button id="logout-btn" type="button"></button>
+          </div>
+        </div>
       </header>
 
       <div id="radarr-status" class="status-banner"></div>
@@ -127,8 +138,6 @@
           </section>
 
           <section class="discover-panel">
-            <div id="mood-chips" class="mood-scroll"></div>
-
             <!-- Year Picker -->
             <div class="year-picker" id="year-picker">
               <div class="year-picker-header">
@@ -255,7 +264,10 @@
           <section class="card swarm-card" id="swarm-card">
             <div class="card-header">
               <h3>Agent Swarm</h3>
-              <span class="swarm-count" id="swarm-count">0</span>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <button class="swarm-refresh-btn" id="swarm-refresh-btn" title="Refresh all agents">↻</button>
+                <span class="swarm-count" id="swarm-count">0</span>
+              </div>
             </div>
             <div class="swarm-preview" id="swarm-preview"></div>
             <span id="generated-at" class="meta"></span>
@@ -565,6 +577,40 @@
       </div>
     </div>
 
-    <script src="/static/app.js?v=20260228k" defer></script>
+    <!-- Debug Console Panel -->
+    <div class="debug-panel" id="debug-panel">
+      <div class="debug-header">
+        <div class="debug-title">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="14" width="18" height="7" rx="1"/>
+            <line x1="7" y1="17.5" x2="7" y2="17.5"/>
+            <line x1="12" y1="17.5" x2="17" y2="17.5"/>
+          </svg>
+          <span>Debug Console</span>
+        </div>
+        <div class="debug-controls">
+          <div class="debug-filters">
+            <button class="debug-filter active" data-filter="all">All</button>
+            <button class="debug-filter" data-filter="agent">Agents</button>
+            <button class="debug-filter" data-filter="api">API</button>
+            <button class="debug-filter" data-filter="error">Errors</button>
+          </div>
+          <button class="debug-clear-btn" id="debug-clear-btn" title="Clear logs">Clear</button>
+          <button class="debug-close-btn" id="debug-close-btn">&times;</button>
+        </div>
+      </div>
+      <div class="debug-body">
+        <div class="debug-log" id="debug-log"></div>
+      </div>
+      <div class="debug-footer">
+        <span class="debug-stats" id="debug-stats">0 events</span>
+        <label class="debug-autoscroll">
+          <input type="checkbox" id="debug-autoscroll" checked />
+          Auto-scroll
+        </label>
+      </div>
+    </div>
+
+    <script src="/static/app.js?v=20260301j" defer></script>
   </body>
 </html>
