@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from app.agents.base import MovieAgent
 from app.clients.tmdb_client import TMDBClient
 from app.models import AgentContext, MovieCandidate, SourcePayload
+
+if TYPE_CHECKING:
+    from app.services.swarm_context import SwarmContext
+
+logger = logging.getLogger(__name__)
 
 
 TMDB_GENRE_MAP: dict[int, str] = {
@@ -18,6 +26,7 @@ TMDB_GENRE_MAP: dict[int, str] = {
 
 class UpcomingAgent(MovieAgent):
     name = "upcoming"
+    supports_llm = True  # Enable LLM for smart ranking
 
     def __init__(
         self,
@@ -32,12 +41,13 @@ class UpcomingAgent(MovieAgent):
         )
         self._fallback_dataset_path = fallback_dataset_path
 
-    async def collect(self, context: AgentContext) -> SourcePayload:
+    async def collect(self, context: AgentContext | SwarmContext) -> SourcePayload:
         if self._tmdb_client:
-            # Fetch ALL upcoming movies (paginated)
-            upcoming_rows = await self._tmdb_client.upcoming_movies_all(max_pages=10)
-            # Also fetch now playing for recent releases
-            now_playing_rows = await self._tmdb_client.now_playing_all(max_pages=5)
+            # Fetch upcoming and now playing in parallel (reduced pages for speed)
+            upcoming_rows, now_playing_rows = await asyncio.gather(
+                self._tmdb_client.upcoming_movies_all(max_pages=3),
+                self._tmdb_client.now_playing_all(max_pages=2),
+            )
 
             movies: list[MovieCandidate] = []
             seen_ids: set[int] = set()
@@ -56,12 +66,32 @@ class UpcomingAgent(MovieAgent):
                     seen_ids.add(tmdb_id)
                     movies.append(self._to_candidate(row, tags=["upcoming", "now-playing"]))
 
+            # Use LLM to rank movies if available
+            llm_enabled = hasattr(context, "ollama_client") and context.ollama_client is not None
+            if llm_enabled and len(movies) > 10:
+                # Convert to dicts for ranking
+                movie_dicts = [
+                    {"title": m.title, "year": m.year, "genres": m.genres}
+                    for m in movies
+                ]
+                ranked_dicts = await context.rank_candidates(movie_dicts, "user preferences")
+                # Reorder movies based on ranking
+                title_to_movie = {m.title: m for m in movies}
+                ranked_movies = []
+                for d in ranked_dicts:
+                    if d["title"] in title_to_movie:
+                        ranked_movies.append(title_to_movie[d["title"]])
+                if ranked_movies:
+                    movies = ranked_movies
+                    logger.debug(f"LLM-ranked {len(movies)} upcoming movies")
+
             return SourcePayload(
                 movies=movies,
                 metadata={
                     "notes": f"Fetched {len(movies)} movies from TMDB (upcoming + now playing)",
                     "upcoming_count": len(upcoming_rows),
                     "now_playing_count": len(now_playing_rows),
+                    "llm_ranked": llm_enabled,
                 },
             )
 

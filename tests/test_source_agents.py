@@ -5,6 +5,7 @@ import pytest
 
 from app.agents.criterion_agent import CriterionAgent
 from app.agents.drunkenslug_agent import DrunkenSlugAgent
+from app.agents.oscar_agent import OscarAgent
 from app.agents.releases_agent import ReleasesAgent
 from app.agents.rogerebert_agent import RogerEbertAgent
 from app.agents.rottentomatoes_agent import RottenTomatoesAgent
@@ -42,6 +43,45 @@ async def test_rottentomatoes_agent_uses_fallback_dataset(tmp_path: Path) -> Non
     assert payload.movies[0].title == "Test Film"
     assert "rottentomatoes" in payload.movies[0].source_tags
     assert "rt-95plus" in payload.movies[0].source_tags
+
+
+@pytest.mark.asyncio
+async def test_rottentomatoes_agent_uses_cached_dataset_when_live_fetch_fails(tmp_path: Path) -> None:
+    seed_path = tmp_path / "rt_seed.json"
+    seed_path.write_text("[]")
+
+    cache_path = tmp_path / "rottentomatoes_cache.json"
+    cache_path.write_text(
+        json.dumps(
+            [
+                {
+                    "position": 1,
+                    "title": "Cached Film",
+                    "year": 2024,
+                    "tomatometer": 88,
+                    "review_count": 211,
+                    "url": "https://www.rottentomatoes.com/m/cached_film",
+                }
+            ]
+        )
+    )
+
+    agent = RottenTomatoesAgent(
+        list_url="https://www.rottentomatoes.com/browse/movies_at_home/sort:popular",
+        timeout_seconds=0.1,
+        fallback_dataset_path=seed_path,
+    )
+
+    async def fail_fetch(_url: str) -> list[dict]:
+        raise RuntimeError("network down")
+
+    agent._client.browse_movies = fail_fetch  # type: ignore[method-assign]
+
+    payload = await agent.collect(_context())
+    assert payload.movies
+    assert payload.movies[0].title == "Cached Film"
+    assert payload.movies[0].rottentomatoes_score == 88
+    assert "cached dataset" in str(payload.metadata.get("notes", "")).lower()
 
 
 @pytest.mark.asyncio
@@ -119,6 +159,34 @@ def test_rottentomatoes_client_extracts_jsonld_movies() -> None:
     assert movies[0]["image"] == "https://cdn.example.com/sample.jpg"
 
 
+def test_rottentomatoes_client_extracts_generic_json_movies() -> None:
+    html = """
+    <script type="application/json">
+      {
+        "props": {
+          "pageProps": {
+            "items": [
+              {
+                "title": "Generic Sample",
+                "releaseYear": 2026,
+                "tomatometerScore": {"score": 93},
+                "reviewCount": 140,
+                "url": "/m/generic_sample",
+                "posterUrl": "https://cdn.example.com/generic.jpg"
+              }
+            ]
+          }
+        }
+      }
+    </script>
+    """
+    movies = RottenTomatoesClient._extract_movies_from_json_scripts(html)
+    assert len(movies) == 1
+    assert movies[0]["title"] == "Generic Sample"
+    assert movies[0]["tomatometer"] == 93
+    assert movies[0]["url"] == "https://www.rottentomatoes.com/m/generic_sample"
+
+
 @pytest.mark.asyncio
 async def test_criterion_agent_handles_numeric_spine_id(tmp_path: Path) -> None:
     dataset_path = tmp_path / "criterion.json"
@@ -141,7 +209,7 @@ async def test_drunkenslug_agent_collects_movie_candidates() -> None:
         timeout_seconds=0.1,
     )
 
-    async def fake_search(query: str = "") -> list[dict]:
+    async def fake_search_all(query: str = "", max_results: int = 1000, batch_size: int = 100) -> list[dict]:
         assert query == ""
         return [
             {
@@ -157,7 +225,7 @@ async def test_drunkenslug_agent_collects_movie_candidates() -> None:
             }
         ]
 
-    agent._client.movie_search = fake_search  # type: ignore[method-assign]
+    agent._client.movie_search_all = fake_search_all  # type: ignore[method-assign]
 
     payload = await agent.collect(_context())
     assert payload.movies
@@ -166,3 +234,40 @@ async def test_drunkenslug_agent_collects_movie_candidates() -> None:
     assert payload.movies[0].year == 2025
     assert "drunkenslug" in payload.movies[0].source_tags
     assert any(e.startswith("DrunkenSlug item date:") for e in payload.movies[0].evidence)
+
+
+@pytest.mark.asyncio
+async def test_oscar_agent_uses_web_fallback_with_best_actor(tmp_path: Path) -> None:
+    dataset_path = tmp_path / "missing_oscars.json"
+    agent = OscarAgent(dataset_path=dataset_path)
+
+    async def fake_web_rows() -> list[dict]:
+        return [
+            {
+                "year": 2025,
+                "winner": " Anora ",
+                "nominees": ["The Brutalist", "Conclave"],
+                "best_actor": "Adrien Brody",
+                "best_actor_film": "The Brutalist",
+            }
+        ]
+
+    agent._load_data = lambda: []  # type: ignore[method-assign]
+    agent._load_data_from_web = fake_web_rows  # type: ignore[method-assign]
+
+    payload = await agent.collect(_context())
+    titles = {movie.title for movie in payload.movies}
+    assert "Anora" in titles
+    assert "The Brutalist" in titles
+    assert "Conclave" in titles
+
+    winner = next(movie for movie in payload.movies if movie.title == "Anora")
+    assert winner.best_picture is True
+    assert "Best Picture winner (2025)" in winner.evidence
+
+    actor_film = [
+        movie for movie in payload.movies
+        if movie.title == "The Brutalist" and "best-actor-winner" in movie.source_tags
+    ]
+    assert actor_film
+    assert actor_film[0].best_actor == "Adrien Brody"

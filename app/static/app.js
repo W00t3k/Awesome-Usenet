@@ -289,6 +289,12 @@ let recommendationObserver = null;
 let recommendationSentinel = null;
 let recommendationScrollActivated = false;
 
+// Endless scroll state
+let recommendationOffset = 0;
+let isLoadingMoreRecommendations = false;
+let hasMoreRecommendations = true;
+const ENDLESS_SCROLL_FETCH_SIZE = 100;
+
 const SOURCE_OPTIONS = [
   { key: "rt", label: "RT" },
   { key: "rogerebert", label: "Ebert" },
@@ -3330,7 +3336,7 @@ function renderReleaseCalendar() {
   today.setHours(23, 59, 59, 999);
   const activeSources = activeCalendarSourceFilter();
 
-  const cutoff = new Date("2026-01-01T00:00:00");
+  const cutoff = new Date(new Date().getFullYear() + 1, 0, 1); // Jan 1 of next year
 
   const rows = (calendarItems || [])
     .filter((item) => {
@@ -3592,7 +3598,7 @@ async function loadMovieOfTheDay() {
     if (motdSource) motdSource.textContent = movie.source || "";
 
     motdContainer.innerHTML = `
-      <div class="motd-card">
+      <div class="motd-card" style="cursor: pointer;">
         <div class="motd-poster">
           ${movie.poster_url
             ? `<img src="${movie.poster_url}" alt="${movie.title}" loading="lazy" />`
@@ -3604,16 +3610,44 @@ async function loadMovieOfTheDay() {
           <p class="motd-tagline">${movie.tagline || ""}</p>
           <p class="motd-overview">${movie.overview || ""}</p>
           ${movie.genres?.length ? `<div class="motd-genres">${movie.genres.map(g => `<span class="genre-tag">${g}</span>`).join("")}</div>` : ""}
+          ${movie.director ? `<p class="motd-director"><strong>Director:</strong> ${movie.director}</p>` : ""}
           ${movie.nominees?.length ? `<p class="motd-nominees"><strong>Also nominated:</strong> ${movie.nominees.slice(0, 4).join(", ")}</p>` : ""}
         </div>
       </div>
     `;
+
+    // Make card clickable - open movie modal
+    const motdCard = motdContainer.querySelector(".motd-card");
+    if (motdCard) {
+      motdCard.addEventListener("click", () => {
+        const recData = {
+          movie: {
+            title: movie.title,
+            year: movie.year,
+            poster_url: movie.poster_url,
+            overview: movie.overview,
+            genres: movie.genres || [],
+            rottentomatoes_score: movie.rottentomatoes_score,
+            source: movie.source,
+          },
+          explanation: movie.overview || `${movie.source} - ${movie.year}`,
+          reasons: movie.director ? [`Directed by ${movie.director}`] : [],
+          evidence: [],
+        };
+        openMovieModal(recData);
+      });
+    }
   } catch (e) {
     console.warn("Failed to load movie of the day:", e);
   }
 }
 
 async function loadRecommendations() {
+  // Reset endless scroll state for fresh load
+  recommendationOffset = 0;
+  hasMoreRecommendations = true;
+  isLoadingMoreRecommendations = false;
+
   const user = currentUserId();
   const recLoading = document.getElementById("rec-loading");
   if (recLoading) recLoading.style.display = "inline";
@@ -3692,6 +3726,9 @@ async function loadRecommendations() {
     renderHeroMovie(heroRec);
     renderRecommendations(gridRecs);
 
+    // Update offset for endless scroll
+    recommendationOffset = filtered.length;
+
     // Show load time
     const loadTime = Math.round(performance.now() - loadStart);
     if (statsEl && statsTextEl) {
@@ -3708,6 +3745,85 @@ async function loadRecommendations() {
   } finally {
     const recLoading = document.getElementById("rec-loading");
     if (recLoading) recLoading.style.display = "none";
+  }
+}
+
+// Load more recommendations for endless scroll
+async function loadMoreRecommendations() {
+  if (isLoadingMoreRecommendations || !hasMoreRecommendations) return;
+  isLoadingMoreRecommendations = true;
+
+  // Show loading indicator
+  let loadingEl = document.getElementById("endless-scroll-loading");
+  if (!loadingEl && recsEl) {
+    loadingEl = document.createElement("div");
+    loadingEl.id = "endless-scroll-loading";
+    loadingEl.className = "endless-scroll-loading";
+    loadingEl.innerHTML = '<div class="spinner"></div><span>Loading more movies...</span>';
+    loadingEl.style.cssText = "grid-column: 1/-1; text-align: center; padding: 24px; color: var(--text-muted); display: flex; align-items: center; justify-content: center; gap: 12px;";
+    recsEl.appendChild(loadingEl);
+  }
+  if (loadingEl) loadingEl.style.display = "flex";
+
+  const user = currentUserId();
+  const recUrl = new URL("/api/recommendations", window.location.origin);
+  recUrl.searchParams.set("user_id", user);
+  recUrl.searchParams.set("count", String(ENDLESS_SCROLL_FETCH_SIZE));
+  recUrl.searchParams.set("offset", String(recommendationOffset));
+
+  const sortVal = sortSelect?.value || "year-desc";
+  recUrl.searchParams.set("sort", sortVal);
+
+  const homeSources = activeHomeSourceQuery();
+  if (homeSources) recUrl.searchParams.set("sources", homeSources);
+
+  const { releaseFrom, releaseTo } = activeReleaseDateFilters();
+  if (releaseFrom) recUrl.searchParams.set("release_from", releaseFrom);
+  if (releaseTo) recUrl.searchParams.set("release_to", releaseTo);
+
+  const yearFrom = Number(yearFromEl?.value) || 0;
+  const yearTo = Number(yearToEl?.value) || 0;
+  if (yearFrom > 0) recUrl.searchParams.set("year_from", String(yearFrom));
+  if (yearTo > 0) recUrl.searchParams.set("year_to", String(yearTo));
+
+  try {
+    const res = await fetch(recUrl.toString());
+    const data = await res.json();
+
+    let newRecs = applyClientFilters(data.recommendations || []);
+    newRecs = sortRecommendations(newRecs);
+
+    if (newRecs.length === 0) {
+      hasMoreRecommendations = false;
+    } else {
+      // Filter out duplicates
+      const existingKeys = new Set(currentRecommendations.map(r =>
+        `${r.movie?.title?.toLowerCase()}-${r.movie?.year}`
+      ));
+      const uniqueNewRecs = newRecs.filter(r =>
+        !existingKeys.has(`${r.movie?.title?.toLowerCase()}-${r.movie?.year}`)
+      );
+
+      if (uniqueNewRecs.length > 0) {
+        currentRecommendations = [...currentRecommendations, ...uniqueNewRecs];
+        recommendationOffset += ENDLESS_SCROLL_FETCH_SIZE;
+
+        // Continue rendering with the existing lazy load system
+        ensureRecommendationSentinel();
+        appendRecommendationBatch();
+        setupRecommendationObserver();
+      }
+
+      if (uniqueNewRecs.length < ENDLESS_SCROLL_FETCH_SIZE / 2) {
+        hasMoreRecommendations = false;
+      }
+    }
+  } catch (err) {
+    console.error("Failed to load more recommendations:", err);
+  } finally {
+    isLoadingMoreRecommendations = false;
+    const loadingEl = document.getElementById("endless-scroll-loading");
+    if (loadingEl) loadingEl.style.display = "none";
   }
 }
 
@@ -3955,11 +4071,25 @@ document.addEventListener("click", (e) => {
 });
 
 window.addEventListener("scroll", () => {
-  if (!recommendationSentinel || renderedRecommendationCount >= currentRecommendations.length) return;
   if (!recommendationScrollActivated && window.scrollY > 0) {
     recommendationScrollActivated = true;
   }
-  maybeAppendRecommendationBatch();
+
+  // First, render more from current batch
+  if (recommendationSentinel && renderedRecommendationCount < currentRecommendations.length) {
+    maybeAppendRecommendationBatch();
+    return;
+  }
+
+  // If we've rendered all current recommendations, load more from API
+  if (renderedRecommendationCount >= currentRecommendations.length && hasMoreRecommendations) {
+    const scrollBottom = window.innerHeight + window.scrollY;
+    const docHeight = document.documentElement.scrollHeight;
+    // Trigger when within 500px of bottom
+    if (docHeight - scrollBottom < 500) {
+      loadMoreRecommendations();
+    }
+  }
 }, { passive: true });
 
 // Event Listeners
@@ -5635,6 +5765,7 @@ if (justAddedSyncBtn) {
     checkAiStatus(),
     loadMoods(),
     loadJustAdded(),
+    loadMovieOfTheDay(),
   ]);
 
   // Load recommendations in background (don't block)
@@ -5758,8 +5889,8 @@ async function loadMcpTools() {
       mcpTools = data.tools || [];
       mcpProviders = {
         groq: data.groq_available || false,
+        groq_model: data.groq_model || "llama-3.3-70b-versatile",
         ollama: data.ollama_available || false,
-        groq_model: data.groq_model || "groq",
         ollama_model: data.ollama_model || "ollama",
       };
       renderMcpProviderSelect();

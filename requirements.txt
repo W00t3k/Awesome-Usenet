@@ -7,6 +7,12 @@ pydantic-settings>=2.10.1
 python-dotenv>=1.1.1
 numpy>=2.3.2
 
+# LLM Clients
+groq>=0.12.0
+
+# CLI and Process Management
+rich>=13.0.0
+
 # Background jobs (optional - graceful fallback if not installed)
 rq>=2.0.0
 redis>=5.0.0

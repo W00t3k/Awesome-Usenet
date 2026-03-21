@@ -951,8 +951,12 @@ body {
   align-self: start;
   position: sticky;
   top: 24px;
-  max-height: calc(100vh - 100px);
+  max-height: calc(100vh - 48px);
   overflow-y: auto;
+  overflow-x: visible;
+  padding-bottom: 24px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
 
 /* Smart sticky sidebar - handled by JS */
@@ -2203,7 +2207,7 @@ label {
 /* ===== Agent Swarm: Click to Expand ===== */
 .swarm-card {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   cursor: pointer;
   transition: all 0.3s ease;
   background:
@@ -2288,15 +2292,18 @@ label {
 .swarm-card .swarm-preview {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  padding: 8px 0;
+  gap: 8px;
+  padding: 12px 4px;
+  min-height: 80px;
+  margin: 0 -4px;
 }
 
 .swarm-card .swarm-preview .agent-dot {
-  width: 10px;
-  height: 10px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   animation: dot-pulse 2s ease-in-out infinite;
+  box-shadow: 0 0 4px currentColor;
 }
 
 .swarm-card .swarm-preview .agent-dot.success { background: #27d4a2; }
@@ -3413,6 +3420,26 @@ label {
   .flip-card-back .title {
     font-size: 14px;
   }
+}
+
+/* ===== Endless Scroll Loading ===== */
+.endless-scroll-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.endless-scroll-loading .spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
 /* ===== Legacy Compatibility ===== */
@@ -4565,6 +4592,12 @@ label {
 .source-dot.radarr { background: #ffc230; }
 .source-dot.nzbgeek { background: #2ecc71; }
 .source-dot.drunkenslug { background: #9b59b6; }
+
+/* Hide text overlay on NZBGeek/DrunkenSlug cards - too small with white text */
+.flip-card[data-source="nzbgeek"] .flip-front-overlay,
+.flip-card[data-source="drunkenslug"] .flip-front-overlay {
+  display: none;
+}
 .source-dot.usenet { background: #3498db; }
 .source-dot.upcoming, .source-dot.tmdb { background: #01b4e4; }
 .source-dot.releases { background: #e74c3c; }
@@ -5317,8 +5350,8 @@ label {
 
 .motd-poster {
   flex-shrink: 0;
-  width: 120px;
-  height: 180px;
+  width: 200px;
+  height: 300px;
   border-radius: 8px;
   overflow: hidden;
   background: var(--bg);
@@ -5415,8 +5448,8 @@ label {
   }
 
   .motd-poster {
-    width: 150px;
-    height: 225px;
+    width: 180px;
+    height: 270px;
   }
 
   .motd-genres {

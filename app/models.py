@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 class MovieCandidate(BaseModel):
     movie_id: str
     title: str
+    normalized_title: str | None = None
     year: int | None = None
     release_date: str | None = None
     poster_url: str | None = None
@@ -14,6 +15,11 @@ class MovieCandidate(BaseModel):
     rogerebert_score: float | None = None
     genres: list[str] = Field(default_factory=list)
     overview: str | None = None
+    best_picture: bool = False
+    best_actor: str | None = None
+    award_labels: list[str] = Field(default_factory=list)
+    streaming_availability: list[str] = Field(default_factory=list)
+    swarm_insight: str | None = None
     source_tags: list[str] = Field(default_factory=list)
     evidence: list[str] = Field(default_factory=list)
     available_on_plex: bool = False
@@ -26,6 +32,8 @@ class AgentResult(BaseModel):
     status: str
     runtime_ms: int
     item_count: int = 0
+    goal: str | None = None
+    reasoning: str | None = None
     notes: str | None = None
 
 
@@ -39,6 +47,7 @@ class Recommendation(BaseModel):
     movie: MovieCandidate
     score: float
     reasons: list[RecommendationReason]
+    explanation: str | None = None  # LLM-generated personalized explanation
 
 
 class RecommendationResponse(BaseModel):

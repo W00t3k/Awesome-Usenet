@@ -15,17 +15,32 @@ class RottenTomatoesAgent(MovieAgent):
         self._list_url = list_url
         self._client = RottenTomatoesClient(timeout_seconds=timeout_seconds)
         self._fallback_dataset_path = fallback_dataset_path
+        self._cache_dataset_path = fallback_dataset_path.with_name("rottentomatoes_cache.json")
 
     async def collect(self, context: AgentContext) -> SourcePayload:
         if self._list_url:
             try:
                 rows = await self._client.browse_movies(self._list_url)
+                if rows:
+                    self._cache_dataset_path.write_text(json.dumps(rows))
                 movies = [self._to_candidate(row, prefix="rt") for row in rows]
                 return SourcePayload(
                     movies=movies,
                     metadata={"notes": f"Fetched {len(movies)} Rotten Tomatoes entries"},
                 )
             except Exception as exc:  # noqa: BLE001
+                if self._cache_dataset_path.exists():
+                    rows = json.loads(self._cache_dataset_path.read_text())
+                    movies = [self._to_candidate(row, prefix="rt_cache") for row in rows]
+                    return SourcePayload(
+                        movies=movies,
+                        metadata={
+                            "notes": (
+                                "Rotten Tomatoes live fetch failed; "
+                                f"using cached dataset ({exc})"
+                            )
+                        },
+                    )
                 if self._fallback_dataset_path.exists():
                     rows = json.loads(self._fallback_dataset_path.read_text())
                     movies = [self._to_candidate(row, prefix="rt_seed") for row in rows]
@@ -39,6 +54,14 @@ class RottenTomatoesAgent(MovieAgent):
                         },
                     )
                 return SourcePayload(metadata={"notes": f"Rotten Tomatoes fetch failed: {exc}"})
+
+        if self._cache_dataset_path.exists():
+            rows = json.loads(self._cache_dataset_path.read_text())
+            movies = [self._to_candidate(row, prefix="rt_cache") for row in rows]
+            return SourcePayload(
+                movies=movies,
+                metadata={"notes": "Rotten Tomatoes URL missing, using cached dataset"},
+            )
 
         if self._fallback_dataset_path.exists():
             rows = json.loads(self._fallback_dataset_path.read_text())

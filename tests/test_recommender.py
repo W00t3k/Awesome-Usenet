@@ -281,3 +281,84 @@ async def test_recommender_filters_tv_episode_style_usenet_titles(tmp_path: Path
     titles = [row.movie.title for row in results]
     assert "The One Show S2026E30" not in titles
     assert "28 Years Later" in titles
+
+
+@pytest.mark.asyncio
+async def test_recommender_merges_normalized_titles_and_streaming_data(tmp_path: Path) -> None:
+    emb = EmbeddingService()
+    store = MemoryStore(db_path=tmp_path / "memory.sqlite", embedding_service=emb)
+    rec = Recommender(memory_store=store)
+
+    results = await rec.rank(
+        user_id="u1",
+        source_movies={
+            "oscars": [
+                MovieCandidate(
+                    movie_id="oscars:eeaao",
+                    title="Everything Everywhere All at Once",
+                    year=2022,
+                    best_picture=True,
+                    source_tags=["oscars", "best-picture-winner"],
+                    evidence=["Best Picture winner (2023)"],
+                )
+            ],
+            "plex": [
+                MovieCandidate(
+                    movie_id="plex:42",
+                    title="Everything  Everywhere All-at-Once",
+                    year=2022,
+                    source_tags=["plex"],
+                    available_on_plex=True,
+                    evidence=["In Plex library"],
+                )
+            ],
+        },
+        top_n=5,
+    )
+
+    assert results
+    movie = results[0].movie
+    assert movie.title == "Everything Everywhere All at Once"
+    assert movie.best_picture is True
+    assert movie.available_on_plex is True
+    assert "Plex" in movie.streaming_availability
+    assert any("Cross-source agreement" in line for line in movie.evidence)
+
+
+@pytest.mark.asyncio
+async def test_recommender_merges_same_title_with_one_year_difference_for_rt(tmp_path: Path) -> None:
+    emb = EmbeddingService()
+    store = MemoryStore(db_path=tmp_path / "memory.sqlite", embedding_service=emb)
+    rec = Recommender(memory_store=store)
+
+    results = await rec.rank(
+        user_id="u1",
+        source_movies={
+            "releases": [
+                MovieCandidate(
+                    movie_id="rel:future_film",
+                    title="Future Film",
+                    year=2026,
+                    source_tags=["releases"],
+                    release_date="2026-09-01",
+                )
+            ],
+            "rottentomatoes": [
+                MovieCandidate(
+                    movie_id="rt:future_film",
+                    title="Future Film",
+                    year=2025,
+                    source_tags=["rottentomatoes", "rt-90plus"],
+                    rottentomatoes_score=91,
+                )
+            ],
+        },
+        top_n=5,
+    )
+
+    assert results
+    movie = results[0].movie
+    assert movie.title == "Future Film"
+    assert movie.rottentomatoes_score == 91
+    assert "rottentomatoes" in movie.source_tags
+    assert "releases" in movie.source_tags

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.clients.http_client import HTTPClient
+from app.config import limits
 
 
 class TMDBClient:
@@ -31,11 +32,12 @@ class TMDBClient:
         )
         return payload.get("results", [])
 
-    async def upcoming_movies_all(self, max_pages: int = 10) -> list[dict]:
+    async def upcoming_movies_all(self, max_pages: int | None = None) -> list[dict]:
         """Fetch ALL upcoming movies across multiple pages."""
+        effective_max_pages = max_pages if max_pages is not None else limits.tmdb_max_pages
         all_movies: list[dict] = []
         page = 1
-        while page <= max_pages:
+        while page <= effective_max_pages:
             kwargs = self._request_kwargs({"page": page})
             payload = await self._http.get_json(
                 f"{self.BASE_URL}/movie/upcoming", **kwargs,
@@ -50,11 +52,12 @@ class TMDBClient:
             page += 1
         return all_movies
 
-    async def now_playing_all(self, max_pages: int = 5) -> list[dict]:
+    async def now_playing_all(self, max_pages: int | None = None) -> list[dict]:
         """Fetch ALL now playing movies across multiple pages."""
+        effective_max_pages = max_pages if max_pages is not None else limits.tmdb_max_pages
         all_movies: list[dict] = []
         page = 1
-        while page <= max_pages:
+        while page <= effective_max_pages:
             kwargs = self._request_kwargs({"page": page})
             payload = await self._http.get_json(
                 f"{self.BASE_URL}/movie/now_playing", **kwargs,
@@ -70,12 +73,13 @@ class TMDBClient:
         return all_movies
 
     async def discover_movies_for_year(
-        self, year: int, max_pages: int = 10, sort_by: str = "popularity.desc"
+        self, year: int, max_pages: int | None = None, sort_by: str = "popularity.desc"
     ) -> list[dict]:
         """Fetch ALL movies from TMDB for a specific year."""
+        effective_max_pages = max_pages if max_pages is not None else limits.tmdb_max_pages
         all_movies: list[dict] = []
         page = 1
-        while page <= max_pages:
+        while page <= effective_max_pages:
             extra: dict[str, Any] = {
                 "primary_release_year": year,
                 "sort_by": sort_by,
@@ -133,3 +137,26 @@ class TMDBClient:
             f"{self.BASE_URL}/search/movie", **kwargs,
         )
         return payload.get("results", [])
+
+    async def movie_watch_providers(self, tmdb_id: int, region: str = "US") -> list[str]:
+        kwargs = self._request_kwargs()
+        payload = await self._http.get_json(
+            f"{self.BASE_URL}/movie/{tmdb_id}/watch/providers", **kwargs,
+        )
+        results = payload.get("results", {})
+        region_payload = results.get(region) if isinstance(results, dict) else None
+        if not isinstance(region_payload, dict):
+            return []
+
+        names: list[str] = []
+        for bucket in ("flatrate", "free", "ads", "rent", "buy"):
+            providers = region_payload.get(bucket) or []
+            if not isinstance(providers, list):
+                continue
+            for provider in providers:
+                if not isinstance(provider, dict):
+                    continue
+                name = str(provider.get("provider_name") or "").strip()
+                if name and name not in names:
+                    names.append(name)
+        return names

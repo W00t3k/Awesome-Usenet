@@ -140,15 +140,32 @@ class Recommender:
     @staticmethod
     def _merge_movies(source_movies: dict[str, list[MovieCandidate]]) -> dict[str, MovieCandidate]:
         merged: dict[str, MovieCandidate] = {}
+        key_by_title: dict[str, str] = {}
         for agent_name, movies in source_movies.items():
             for movie in movies:
                 if movie.available_on_usenet and Recommender._looks_like_tv_episode(movie.title):
                     continue
+                if not movie.normalized_title:
+                    movie.normalized_title = Recommender._normalize_title(movie.title)
                 if agent_name not in movie.source_tags:
                     movie.source_tags = sorted(set(movie.source_tags + [agent_name]))
+
+                title_key = movie.normalized_title
                 key = Recommender._title_year_key(movie.title, movie.year)
+                key_without_year = Recommender._title_year_key(movie.title, None)
+                existing_title_key = key_by_title.get(title_key)
+                if existing_title_key and existing_title_key in merged:
+                    existing_movie = merged[existing_title_key]
+                    if Recommender._years_compatible(existing_movie.year, movie.year):
+                        key = existing_title_key
+                elif movie.year is not None and key_without_year in merged:
+                    key = key_without_year
+                elif movie.year is None and title_key in key_by_title:
+                    key = key_by_title[title_key]
+
                 if key not in merged:
                     merged[key] = movie
+                    key_by_title.setdefault(title_key, key)
                     continue
 
                 existing = merged[key]
@@ -176,12 +193,80 @@ class Recommender:
                     existing.rogerebert_score = movie.rogerebert_score
                 if not existing.genres and movie.genres:
                     existing.genres = movie.genres
+                existing.best_picture = existing.best_picture or movie.best_picture
+                if not existing.best_actor and movie.best_actor:
+                    existing.best_actor = movie.best_actor
+                existing.award_labels = sorted(set(existing.award_labels + movie.award_labels))
+                existing.streaming_availability = sorted(
+                    set(existing.streaming_availability + movie.streaming_availability)
+                )
+                if not existing.swarm_insight and movie.swarm_insight:
+                    existing.swarm_insight = movie.swarm_insight
+
+        for movie in merged.values():
+            Recommender._finalize_merged_movie(movie)
 
         return merged
 
     @staticmethod
     def _title_year_key(title: str, year: int | None) -> str:
-        return f"{title.strip().lower()}::{year if year is not None else 'na'}"
+        normalized = Recommender._normalize_title(title)
+        return f"{normalized}::{year if year is not None else 'na'}"
+
+    @staticmethod
+    def _normalize_title(title: str) -> str:
+        text = re.sub(r"\s+", " ", str(title or "").strip().lower())
+        text = text.replace("’", "'")
+        text = re.sub(r"\b(the|a|an)\b", " ", text)
+        text = re.sub(r"[^a-z0-9]+", "", text)
+        return text
+
+    @staticmethod
+    def _years_compatible(existing_year: int | None, incoming_year: int | None) -> bool:
+        if existing_year is None or incoming_year is None:
+            return True
+        return abs(existing_year - incoming_year) <= 1
+
+    @staticmethod
+    def _finalize_merged_movie(movie: MovieCandidate) -> None:
+        providers = list(movie.streaming_availability or [])
+        if movie.available_on_plex and "Plex" not in providers:
+            providers.append("Plex")
+        if movie.available_on_radarr and "Radarr" not in providers:
+            providers.append("Radarr")
+        if movie.available_on_usenet and "Usenet" not in providers:
+            providers.append("Usenet")
+        movie.streaming_availability = providers
+
+        evidence: list[str] = []
+        for line in movie.evidence:
+            clean = str(line or "").strip()
+            if clean and clean not in evidence:
+                evidence.append(clean)
+
+        if movie.best_picture and not any("best picture" in line.lower() for line in evidence):
+            evidence.append("Awards signal: Best Picture")
+        if movie.best_actor and not any("best actor" in line.lower() for line in evidence):
+            evidence.append(f"Awards signal: Best Actor ({movie.best_actor})")
+        if movie.streaming_availability:
+            providers_label = ", ".join(movie.streaming_availability[:3])
+            evidence.append(f"Streaming: {providers_label}")
+
+        compact: list[str] = []
+        for line in evidence:
+            short = Recommender._truncate_evidence_line(line, max_chars=88)
+            if short and short not in compact:
+                compact.append(short)
+            if len(compact) >= 8:
+                break
+        movie.evidence = compact
+
+    @staticmethod
+    def _truncate_evidence_line(line: str, max_chars: int = 88) -> str:
+        text = " ".join(str(line or "").split()).strip()
+        if len(text) <= max_chars:
+            return text
+        return text[: max_chars - 1].rstrip() + "…"
 
     @staticmethod
     def _looks_like_tv_episode(title: str) -> bool:
@@ -217,7 +302,7 @@ class Recommender:
             return True
         if "oscars" in required_sources and "oscars" in tags:
             return True
-        if "criterion" in required_sources and "criterion" in tags:
+        if "criterion" in required_sources and ("criterion" in tags or "criterion-release" in tags):
             return True
 
         return False
@@ -263,6 +348,8 @@ class Recommender:
         oscar_component = 0.0
         if "best-picture-winner" in movie.source_tags:
             oscar_component = 1.0
+        elif "best-actor-winner" in movie.source_tags:
+            oscar_component = 0.8
         elif "best-picture-nominee" in movie.source_tags:
             oscar_component = 0.7
         elif "oscars" in movie.source_tags:
@@ -277,7 +364,8 @@ class Recommender:
                 )
             )
 
-        criterion_component = 1.0 if "criterion" in movie.source_tags else 0.0
+        movie_tags = {tag.lower() for tag in movie.source_tags}
+        criterion_component = 1.0 if ("criterion" in movie_tags or "criterion-release" in movie_tags) else 0.0
         if criterion_component > 0:
             reasons.append(
                 RecommendationReason(
@@ -327,42 +415,9 @@ class Recommender:
                 )
             )
 
-        preference_component, nearest = await self._memory_store.preference_similarity(
-            user_id=user_id,
-            title=movie.title,
-            overview=movie.overview,
-            genres=movie.genres,
-            top_k=3,
-        )
-        if nearest:
-            examples = ", ".join(
-                f"{entry.title} ({'liked' if entry.liked else 'disliked'})"
-                for entry in nearest[:2]
-            )
-            reasons.append(
-                RecommendationReason(
-                    label="Preference memory",
-                    value=round(preference_component, 3),
-                    detail=f"Similarity to your history: {examples}",
-                )
-            )
-
-        liked_rag_component, liked_matches = await self._memory_store.liked_rag_similarity(
-            user_id=user_id,
-            title=movie.title,
-            overview=movie.overview,
-            genres=movie.genres,
-            top_k=3,
-        )
-        if liked_matches:
-            examples = ", ".join(entry.title for entry in liked_matches[:2])
-            reasons.append(
-                RecommendationReason(
-                    label="Liked RAG",
-                    value=round(liked_rag_component, 3),
-                    detail=f"Semantic match with liked movies: {examples}",
-                )
-            )
+        # Preference-based weighting intentionally disabled for swarm ranking.
+        preference_component = 0.0
+        liked_rag_component = 0.0
 
         unusual_component = 1.0 if "unusual-discovery" in movie.source_tags else 0.0
         if unusual_component > 0:
@@ -394,8 +449,6 @@ class Recommender:
             + upcoming_component * 0.08
             + releases_component * 0.06
             + availability_component * 0.16
-            + preference_component * 0.08
-            + liked_rag_component * 0.08
             + unusual_component * 0.03
             + poster_component * 0.03
             + source_span * 0.10
@@ -423,6 +476,13 @@ class Recommender:
             value += 0.3
         if movie.available_on_usenet:
             value += 0.2
+        non_local_streamers = [
+            provider
+            for provider in (movie.streaming_availability or [])
+            if provider not in {"Plex", "Radarr", "Usenet"}
+        ]
+        if non_local_streamers:
+            value += 0.15
         return min(value, 1.0)
 
     @staticmethod

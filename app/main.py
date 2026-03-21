@@ -28,7 +28,6 @@ from app.agents.criterion_agent import CriterionAgent
 from app.agents.drunkenslug_agent import DrunkenSlugAgent
 from app.agents.oscar_agent import OscarAgent
 from app.agents.plex_agent import PlexAgent
-from app.agents.rogerebert_agent import RogerEbertAgent
 from app.agents.releases_agent import ReleasesAgent
 from app.agents.rottentomatoes_agent import RottenTomatoesAgent
 from app.agents.upcoming_agent import UpcomingAgent
@@ -67,7 +66,6 @@ from app.clients.llm_client import UnifiedLLMClient
 from app.clients.plex_client import PlexClient
 from app.clients.poster_lookup_client import PosterLookupClient
 from app.clients.radarr_client import RadarrClient
-from app.clients.rogerebert_client import RogerEbertClient
 from app.clients.releases_client import ReleasesClient
 from app.clients.rottentomatoes_client import RottenTomatoesClient
 from app.clients.tmdb_client import TMDBClient
@@ -106,7 +104,6 @@ load_dotenv(dotenv_path=env_path)
 DEFAULT_URLS: dict[str, str] = {
     "rottentomatoes_list_url": "https://www.rottentomatoes.com/browse/movies_at_home/sort:popular",
     "releases_url": "https://www.releases.com/calendar/movie",
-    "rogerebert_reviews_url": "https://www.rogerebert.com/reviews",
     "plex_base_url": "http://localhost:32400",
     "radarr_base_url": "http://localhost:7878",
     "nzbgeek_rss_url": "https://api.nzbgeek.info/rss?t=search&cat=2000&apikey={API_KEY}",
@@ -124,7 +121,6 @@ ENV_KEY_MAP: dict[str, str] = {
     "tmdb_api_key": "TMDB_API_KEY",
     "rottentomatoes_list_url": "ROTTENTOMATOES_LIST_URL",
     "releases_url": "RELEASES_URL",
-    "rogerebert_reviews_url": "ROGEREBERT_REVIEWS_URL",
     "plex_base_url": "PLEX_BASE_URL",
     "plex_token": "PLEX_TOKEN",
     "radarr_base_url": "RADARR_BASE_URL",
@@ -137,13 +133,14 @@ ENV_KEY_MAP: dict[str, str] = {
     "usenet_api_key": "USENET_API_KEY",
     "ollama_base_url": "OLLAMA_BASE_URL",
     "ollama_model": "OLLAMA_MODEL",
+    "groq_api_key": "GROQ_API_KEY",
+    "groq_model": "GROQ_MODEL",
 }
 
 OPTIONAL_FIELDS = {
     "tmdb_api_key",
     "rottentomatoes_list_url",
     "releases_url",
-    "rogerebert_reviews_url",
     "plex_token",
     "radarr_api_key",
     "nzbgeek_rss_url",
@@ -151,6 +148,8 @@ OPTIONAL_FIELDS = {
     "drunkenslug_api_key",
     "usenet_api_key",
     "ollama_model",
+    "groq_api_key",
+    "groq_model",
 }
 
 
@@ -158,7 +157,6 @@ class IntegrationSettingsPayload(BaseModel):
     tmdb_api_key: str | None = None
     rottentomatoes_list_url: str | None = None
     releases_url: str | None = None
-    rogerebert_reviews_url: str | None = None
     plex_base_url: str | None = None
     plex_token: str | None = None
     radarr_base_url: str | None = None
@@ -171,6 +169,8 @@ class IntegrationSettingsPayload(BaseModel):
     usenet_api_key: str | None = None
     ollama_base_url: str | None = None
     ollama_model: str | None = None
+    groq_api_key: str | None = None
+    groq_model: str | None = None
 
 
 class IntegrationTestRequest(BaseModel):
@@ -178,13 +178,13 @@ class IntegrationTestRequest(BaseModel):
         "tmdb",
         "rottentomatoes",
         "releases",
-        "rogerebert",
         "plex",
         "radarr",
         "nzbgeek",
         "drunkenslug",
         "usenet",
         "ollama",
+        "groq",
     ]
     values: IntegrationSettingsPayload | None = None
 
@@ -231,7 +231,6 @@ def _to_public_settings_values() -> dict[str, str]:
         "tmdb_api_key": settings.tmdb_api_key or "",
         "rottentomatoes_list_url": settings.rottentomatoes_list_url or "",
         "releases_url": settings.releases_url or DEFAULT_URLS["releases_url"],
-        "rogerebert_reviews_url": settings.rogerebert_reviews_url or "",
         "plex_base_url": settings.plex_base_url or DEFAULT_URLS["plex_base_url"],
         "plex_token": settings.plex_token or "",
         "radarr_base_url": settings.radarr_base_url or DEFAULT_URLS["radarr_base_url"],
@@ -244,6 +243,8 @@ def _to_public_settings_values() -> dict[str, str]:
         "usenet_api_key": settings.usenet_api_key or "",
         "ollama_base_url": settings.ollama_base_url or DEFAULT_URLS["ollama_base_url"],
         "ollama_model": settings.ollama_model or DEFAULT_URLS["ollama_model"],
+        "groq_api_key": settings.groq_api_key or "",
+        "groq_model": settings.groq_model or "llama-3.3-70b-versatile",
     }
 
 
@@ -317,11 +318,6 @@ def _build_runtime() -> tuple[MemoryStore, SwarmOrchestrator]:
             releases_url=settings.releases_url,
             timeout_seconds=settings.source_timeout_seconds,
             fallback_dataset_path=project_root / "data/releases_seed.json",
-        ),
-        RogerEbertAgent(
-            reviews_url=settings.rogerebert_reviews_url,
-            timeout_seconds=settings.source_timeout_seconds,
-            fallback_dataset_path=project_root / "data/rogerebert_seed.json",
         ),
         PlexAgent(
             base_url=settings.plex_base_url,
@@ -460,7 +456,7 @@ def _build_runtime() -> tuple[MemoryStore, SwarmOrchestrator]:
         if settings.tmdb_api_key
         else None
     )
-    # Unified LLM client: Groq Cloud (fast) with Ollama fallback
+    # LLM: Groq (cloud) + Ollama (local)
     llm_client = UnifiedLLMClient(
         groq_api_key=settings.groq_api_key,
         groq_model=settings.groq_model,
@@ -598,21 +594,23 @@ async def _integration_status() -> dict[str, bool]:
     _rss = settings.nzbgeek_rss_url or ""
     _has_placeholder = "{API_KEY}" in _rss or "${API_KEY}" in _rss
     nzbgeek_configured = bool(_rss) and (not _has_placeholder or bool(settings.nzbgeek_api_key))
-    ollama_connected = await _ollama_is_connected(
-        settings.ollama_base_url,
-        settings.ollama_model,
-    )
+    ollama_connected = False
+    if settings.ollama_base_url:
+        ollama_connected = await _ollama_is_connected(
+            settings.ollama_base_url,
+            settings.ollama_model,
+        )
     return {
         "tmdb": bool(settings.tmdb_api_key),
         "rottentomatoes": bool(settings.rottentomatoes_list_url),
         "releases": bool(settings.releases_url),
-        "rogerebert": bool(settings.rogerebert_reviews_url),
         "plex": bool(settings.plex_token),
         "radarr": bool(settings.radarr_api_key),
         "nzbgeek": nzbgeek_configured,
         "drunkenslug": bool(settings.drunkenslug_api_key),
         "usenet": bool(settings.usenet_api_key or settings.nzbgeek_api_key or settings.drunkenslug_api_key),
         "ollama": ollama_connected,
+        "groq": bool(settings.groq_api_key),
     }
 
 
@@ -1116,6 +1114,63 @@ async def integrations_page(request: Request) -> HTMLResponse:
     )
 
 
+@app.get("/chat", response_class=HTMLResponse)
+async def chat_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request,
+        name="chat.html",
+        context={"app_title": settings.app_title},
+    )
+
+
+class ChatRequest(BaseModel):
+    message: str
+    history: list[dict] = Field(default_factory=list)
+
+
+@app.get("/api/chat/status")
+async def chat_status() -> dict:
+    """Check if AI chat is available."""
+    llm = await _get_llm_client()
+    if llm and llm.available:
+        return {"available": True, "provider": llm.provider}
+    return {"available": False, "provider": None}
+
+
+@app.post("/api/chat")
+async def chat_with_ai(payload: ChatRequest) -> dict:
+    """Chat with the AI assistant."""
+    llm = await _get_llm_client()
+    if not llm or not llm.available:
+        return {"response": None, "error": "AI not available. Configure Groq or Ollama in Settings."}
+
+    # Build conversation context
+    system_prompt = """You are a friendly and knowledgeable movie assistant. You help users discover films,
+provide recommendations, discuss cinema, and answer questions about movies, directors, actors, and the film industry.
+Keep responses concise but informative. Use a conversational tone."""
+
+    # Build the prompt with history
+    messages = []
+    for msg in payload.history[-6:]:  # Last 6 messages for context
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+        if role == "user":
+            messages.append(f"User: {content}")
+        else:
+            messages.append(f"Assistant: {content}")
+
+    messages.append(f"User: {payload.message}")
+    conversation = "\n".join(messages)
+
+    prompt = f"{conversation}\nAssistant:"
+
+    try:
+        response = await llm.generate(prompt=prompt, system=system_prompt, max_tokens=500)
+        return {"response": response.strip(), "provider": llm.provider}
+    except Exception as e:
+        return {"response": None, "error": str(e)}
+
+
 @app.get("/usenet", response_class=HTMLResponse)
 async def usenet_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
@@ -1175,6 +1230,7 @@ def _apply_enrichment_cache(recommendations: list) -> list:
 async def get_recommendations(
     user_id: str = Query(default="default"),
     count: int = Query(default=200, ge=1, le=limits.recommendations_max),
+    offset: int = Query(default=0, ge=0),
     sort: str | None = Query(default=None),
     sources: str | None = Query(default=None),
     release_from: str | None = Query(default=None),
@@ -1187,9 +1243,11 @@ async def get_recommendations(
     release_date_to = _parse_date_query(release_to)
     if release_date_from and release_date_to and release_date_from > release_date_to:
         release_date_from, release_date_to = release_date_to, release_date_from
+    # Fetch more than requested to support offset
+    fetch_count = count + offset
     response = await swarm.recommend_filtered(
         user_id=user_id,
-        count=count,
+        count=fetch_count,
         sort_mode=sort,
         required_sources=required_sources,
         release_date_from=release_date_from,
@@ -1197,6 +1255,9 @@ async def get_recommendations(
         year_from=year_from,
         year_to=year_to,
     )
+    # Apply offset - skip first N recommendations
+    if offset > 0 and response.recommendations:
+        response.recommendations = response.recommendations[offset:]
     # Apply cached enrichment and queue unenriched movies
     _apply_enrichment_cache(response.recommendations)
     return response
@@ -1234,53 +1295,76 @@ async def stream_recommendations(
 
 @app.get("/api/movie-of-the-day")
 async def get_movie_of_the_day(user_id: str = Query(default="default")) -> dict:
-    """Fast endpoint returning a single featured movie from cached/static data."""
-    import hashlib
+    """Use LLM to pick a random Oscar or Cannes winner on each request."""
+    import random
 
-    # Use today's date to pick a consistent "movie of the day"
-    today_seed = date.today().isoformat()
-    seed_hash = int(hashlib.md5(today_seed.encode()).hexdigest(), 16)
+    # Use LLM to generate a random movie each time
+    llm = await _get_llm_client()
+    if llm and llm.available:
+        try:
+            # Random award type and decade each request
+            award_type = random.choice(["Oscar Best Picture", "Cannes Palme d'Or"])
+            decade_start = random.choice([1950, 1960, 1970, 1980, 1990, 2000, 2010, 2020])
+            decade_end = min(decade_start + 9, 2025)
+            logger.info(f"Movie of the day: Asking LLM for {award_type} from {decade_start}-{decade_end}")
 
-    # Try to get from Oscar winners (always available, no network calls)
+            prompt = f"""Pick ONE {award_type} winner from {decade_start}-{decade_end}.
+
+Return ONLY valid JSON (no markdown, no code blocks):
+{{"title": "Movie Title", "year": 1999, "director": "Director Name", "overview": "2-3 sentence description of why this film is significant", "genres": ["Drama", "Genre2"], "source": "{award_type} Winner"}}"""
+
+            response = await llm.generate(
+                prompt=prompt,
+                system="You are a film expert. Return only valid JSON, no other text.",
+                max_tokens=300,
+            )
+
+            # Parse JSON from response
+            response = response.strip()
+            # Remove markdown code blocks if present
+            if response.startswith("```"):
+                response = response.split("```")[1]
+                if response.startswith("json"):
+                    response = response[4:]
+            response = response.strip()
+
+            logger.info(f"Movie of the day LLM response: {response[:200]}")
+            movie_data = json.loads(response)
+            movie_data["tagline"] = "Today's Featured Film"
+            logger.info(f"Movie of the day: {movie_data.get('title')} ({movie_data.get('year')})")
+
+            # Fetch poster from TMDB/iTunes
+            if poster_lookup_client and not movie_data.get("poster_url"):
+                try:
+                    poster_url = await poster_lookup_client.poster_for(
+                        title=movie_data.get("title", ""),
+                        year=movie_data.get("year"),
+                    )
+                    if poster_url:
+                        movie_data["poster_url"] = poster_url
+                except Exception as e:
+                    logger.warning(f"Poster lookup failed: {e}")
+
+            return {"ok": True, "movie": movie_data}
+        except Exception as e:
+            logger.warning(f"LLM movie-of-the-day failed: {e}")
+
+    # Fallback to static data if LLM unavailable
     try:
         oscar_data_path = project_root / "data/oscars_best_picture.json"
         if oscar_data_path.exists():
             oscar_movies = json.loads(oscar_data_path.read_text())
             if oscar_movies:
-                movie = oscar_movies[seed_hash % len(oscar_movies)]
+                movie = random.choice(oscar_movies)
                 title = movie.get("winner") or movie.get("title", "Unknown")
                 return {
                     "ok": True,
                     "movie": {
                         "title": title,
                         "year": movie.get("year"),
-                        "poster_url": movie.get("poster_url"),
-                        "overview": movie.get("overview", f"Oscar Best Picture Winner {movie.get('year')}"),
-                        "genres": movie.get("genres", ["Drama"]),
+                        "overview": f"Oscar Best Picture Winner {movie.get('year')}",
+                        "genres": ["Drama"],
                         "source": "Oscar Best Picture Winner",
-                        "tagline": "Today's Featured Film",
-                        "nominees": movie.get("nominees", []),
-                    },
-                }
-    except Exception:
-        pass
-
-    # Fallback to Criterion if Oscar fails
-    try:
-        criterion_path = project_root / "data/criterion_collection.json"
-        if criterion_path.exists():
-            criterion_movies = json.loads(criterion_path.read_text())
-            if criterion_movies:
-                movie = criterion_movies[seed_hash % len(criterion_movies)]
-                return {
-                    "ok": True,
-                    "movie": {
-                        "title": movie.get("title", "Unknown"),
-                        "year": movie.get("year"),
-                        "poster_url": movie.get("poster_url"),
-                        "overview": movie.get("overview", ""),
-                        "genres": movie.get("genres", []),
-                        "source": "Criterion Collection",
                         "tagline": "Today's Featured Film",
                     },
                 }
@@ -2199,17 +2283,23 @@ async def check_usenet_availability(
 async def delete_radarr_movie(
     movie_id: int,
     delete_files: bool = Query(default=True),
+    server_id: int | None = Query(default=None),
 ) -> dict:
     """Delete a movie from Radarr."""
-    if not settings.radarr_base_url or not settings.radarr_api_key:
-        return {"ok": False, "message": "Radarr not configured"}
+    radarr_config = _get_radarr_config(server_id)
+    if not radarr_config:
+        return {"ok": False, "message": "No Radarr server configured"}
+
+    base_url, api_key = radarr_config
+    if not api_key:
+        return {"ok": False, "message": "Radarr API key missing"}
 
     try:
         import httpx
 
-        url = f"{settings.radarr_base_url.rstrip('/')}/api/v3/movie/{movie_id}"
+        url = f"{base_url.rstrip('/')}/api/v3/movie/{movie_id}"
         params = {"deleteFiles": str(delete_files).lower(), "addImportExclusion": "false"}
-        headers = {"X-Api-Key": settings.radarr_api_key}
+        headers = {"X-Api-Key": api_key}
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.delete(url, params=params, headers=headers)
@@ -2359,14 +2449,21 @@ async def get_poster(
 
 
 @app.get("/api/radarr-monitored")
-async def get_radarr_monitored() -> dict:
-    if not settings.radarr_api_key:
-        return {"configured": False, "ok": False, "movies": [], "message": "Download service not configured"}
+async def get_radarr_monitored(
+    server_id: int | None = Query(default=None),
+) -> dict:
+    radarr_config = _get_radarr_config(server_id)
+    if not radarr_config:
+        return {"configured": False, "ok": False, "movies": [], "message": "No Radarr server configured"}
+
+    base_url, api_key = radarr_config
+    if not api_key:
+        return {"configured": False, "ok": False, "movies": [], "message": "Radarr API key missing"}
 
     try:
         movies = await RadarrClient(
-            base_url=settings.radarr_base_url,
-            api_key=settings.radarr_api_key,
+            base_url=base_url,
+            api_key=api_key,
             timeout_seconds=settings.source_timeout_seconds,
         ).movies()
 
@@ -2972,6 +3069,185 @@ async def rag_query_likes(payload: RagLikesQueryRequest) -> dict:
     }
 
 
+# ===== Server Configuration Endpoints (Multi-instance Plex/Radarr) =====
+
+
+def _get_plex_config(server_id: int | None = None) -> tuple[str, str] | None:
+    """Get Plex base_url and token, from server_id or default/env."""
+    if server_id:
+        server = memory_store.get_server(server_id)
+        if server and server["service_type"] == "plex":
+            return server["base_url"], server.get("api_key")
+        return None
+
+    # Try database default first
+    default = memory_store.get_default_server("plex")
+    if default:
+        return default["base_url"], default.get("api_key")
+
+    # Fall back to env vars
+    if settings.plex_token:
+        return settings.plex_base_url, settings.plex_token
+    return None
+
+
+def _get_radarr_config(server_id: int | None = None) -> tuple[str, str] | None:
+    """Get Radarr base_url and api_key, from server_id or default/env."""
+    if server_id:
+        server = memory_store.get_server(server_id)
+        if server and server["service_type"] == "radarr":
+            return server["base_url"], server.get("api_key")
+        return None
+
+    # Try database default first
+    default = memory_store.get_default_server("radarr")
+    if default:
+        return default["base_url"], default.get("api_key")
+
+    # Fall back to env vars
+    if settings.radarr_api_key:
+        return settings.radarr_base_url, settings.radarr_api_key
+    return None
+
+
+class ServerConfigPayload(BaseModel):
+    service_type: Literal["plex", "radarr"]
+    name: str
+    base_url: str
+    api_key: str | None = None
+    is_default: bool = False
+
+
+class ServerConfigUpdatePayload(BaseModel):
+    name: str | None = None
+    base_url: str | None = None
+    api_key: str | None = None
+
+
+@app.get("/api/servers")
+async def list_servers(
+    service_type: str | None = Query(default=None),
+) -> dict:
+    """List all server configurations."""
+    servers = memory_store.list_servers(service_type=service_type)
+    # Mask API keys in response (don't expose raw keys)
+    for server in servers:
+        if server.get("api_key"):
+            key = server["api_key"]
+            server["api_key_masked"] = f"{key[:4]}...{key[-4:]}" if len(key) > 8 else "****"
+            del server["api_key"]  # Remove raw key from response
+        else:
+            server["api_key_masked"] = None
+            server.pop("api_key", None)
+    return {"ok": True, "servers": servers}
+
+
+@app.post("/api/servers")
+async def create_server(payload: ServerConfigPayload) -> dict:
+    """Create a new server configuration."""
+    logger.info(f"Creating server: type={payload.service_type}, name={payload.name}, url={payload.base_url}, has_key={payload.api_key is not None}")
+    server_id = memory_store.create_server(
+        service_type=payload.service_type,
+        name=payload.name,
+        base_url=payload.base_url,
+        api_key=payload.api_key,
+        is_default=payload.is_default,
+    )
+    if server_id is None:
+        logger.error(f"Failed to create server: {payload.name}")
+        return {"ok": False, "message": "Failed to create server (name may already exist)"}
+    logger.info(f"Created server with id={server_id}")
+    return {"ok": True, "server_id": server_id, "message": f"Created {payload.service_type} server '{payload.name}'"}
+
+
+@app.get("/api/servers/{server_id}")
+async def get_server(server_id: int) -> dict:
+    """Get a server configuration by ID."""
+    server = memory_store.get_server(server_id)
+    if not server:
+        return {"ok": False, "message": "Server not found"}
+    # Mask API key
+    if server.get("api_key"):
+        key = server["api_key"]
+        server["api_key_masked"] = f"{key[:4]}...{key[-4:]}" if len(key) > 8 else "****"
+    return {"ok": True, "server": server}
+
+
+@app.put("/api/servers/{server_id}")
+async def update_server(server_id: int, payload: ServerConfigUpdatePayload) -> dict:
+    """Update a server configuration."""
+    existing = memory_store.get_server(server_id)
+    if not existing:
+        return {"ok": False, "message": "Server not found"}
+
+    success = memory_store.update_server(
+        server_id=server_id,
+        name=payload.name,
+        base_url=payload.base_url,
+        api_key=payload.api_key,
+    )
+    if not success:
+        return {"ok": False, "message": "Failed to update server"}
+    return {"ok": True, "message": "Server updated"}
+
+
+@app.delete("/api/servers/{server_id}")
+async def delete_server(server_id: int) -> dict:
+    """Delete a server configuration."""
+    success = memory_store.delete_server(server_id)
+    if not success:
+        return {"ok": False, "message": "Server not found"}
+    return {"ok": True, "message": "Server deleted"}
+
+
+@app.post("/api/servers/{server_id}/default")
+async def set_default_server(server_id: int) -> dict:
+    """Set a server as the default for its service type."""
+    success = memory_store.set_default_server(server_id)
+    if not success:
+        return {"ok": False, "message": "Server not found"}
+    return {"ok": True, "message": "Server set as default"}
+
+
+@app.post("/api/servers/{server_id}/test")
+async def test_server(server_id: int) -> dict:
+    """Test connection to a server."""
+    server = memory_store.get_server(server_id)
+    if not server:
+        return {"ok": False, "message": "Server not found"}
+
+    service_type = server["service_type"]
+    base_url = server["base_url"]
+    api_key = server.get("api_key")
+
+    try:
+        if service_type == "plex":
+            if not api_key:
+                return {"ok": False, "message": "Plex token required"}
+            client = PlexClient(
+                base_url=base_url,
+                token=api_key,
+                timeout_seconds=settings.source_timeout_seconds,
+            )
+            movies = await client.library_movies()
+            return {"ok": True, "message": f"Plex connected ({len(movies)} movies in library)"}
+
+        elif service_type == "radarr":
+            if not api_key:
+                return {"ok": False, "message": "Radarr API key required"}
+            client = RadarrClient(
+                base_url=base_url,
+                api_key=api_key,
+                timeout_seconds=settings.source_timeout_seconds,
+            )
+            movies = await client.movies()
+            return {"ok": True, "message": f"Radarr connected ({len(movies)} movies)"}
+
+        return {"ok": False, "message": f"Unknown service type: {service_type}"}
+    except Exception as exc:
+        return {"ok": False, "message": str(exc)}
+
+
 @app.get("/api/seen/{user_id}", response_model=list[SeenMovieRow])
 async def get_seen_movies(
     user_id: str,
@@ -2996,13 +3272,19 @@ async def remove_seen_movie(payload: SeenMovieDeleteInput) -> dict:
 @app.post("/api/seen/import/plex")
 async def import_seen_from_plex(
     user_id: str = Query(default="default"),
+    server_id: int | None = Query(default=None),
 ) -> dict:
-    if not settings.plex_token:
-        return {"ok": False, "imported": 0, "message": "PLEX_TOKEN missing"}
+    plex_config = _get_plex_config(server_id)
+    if not plex_config:
+        return {"ok": False, "imported": 0, "message": "No Plex server configured"}
+
+    base_url, token = plex_config
+    if not token:
+        return {"ok": False, "imported": 0, "message": "Plex token missing"}
 
     rows = await PlexClient(
-        base_url=settings.plex_base_url,
-        token=settings.plex_token,
+        base_url=base_url,
+        token=token,
         timeout_seconds=settings.source_timeout_seconds,
     ).library_movies()
 
@@ -3041,13 +3323,19 @@ async def import_seen_from_plex(
 async def plex_library(
     limit: int = Query(default=600, ge=1, le=limits.browse_max),
     q: str | None = Query(default=None),
+    server_id: int | None = Query(default=None),
 ) -> dict:
-    if not settings.plex_token:
-        return {"ok": False, "movies": [], "message": "PLEX_TOKEN missing"}
+    plex_config = _get_plex_config(server_id)
+    if not plex_config:
+        return {"ok": False, "movies": [], "message": "No Plex server configured"}
+
+    base_url, token = plex_config
+    if not token:
+        return {"ok": False, "movies": [], "message": "Plex token missing"}
 
     rows = await PlexClient(
-        base_url=settings.plex_base_url,
-        token=settings.plex_token,
+        base_url=base_url,
+        token=token,
         timeout_seconds=settings.source_timeout_seconds,
     ).library_movies()
 
@@ -3083,18 +3371,24 @@ class PlexWatchlistRequest(BaseModel):
     year: int | None = None
     tmdb_id: int | None = None
     imdb_id: str | None = None
+    server_id: int | None = None
 
 
 @app.post("/api/plex/watchlist")
 async def add_to_plex_watchlist(req: PlexWatchlistRequest) -> dict:
     """Add a movie to the Plex Watchlist."""
-    if not settings.plex_token:
-        return {"ok": False, "message": "PLEX_TOKEN not configured"}
+    plex_config = _get_plex_config(req.server_id)
+    if not plex_config:
+        return {"ok": False, "message": "No Plex server configured"}
+
+    base_url, token = plex_config
+    if not token:
+        return {"ok": False, "message": "Plex token missing"}
 
     import httpx
 
     headers = {
-        "X-Plex-Token": settings.plex_token,
+        "X-Plex-Token": token,
         "X-Plex-Client-Identifier": "majic-movie-selector",
         "Accept": "application/json",
     }
@@ -4066,27 +4360,6 @@ async def test_integration(payload: IntegrationTestRequest) -> dict:
                 "message": f"Releases.com reachable ({len(rows)} parsed rows)",
             }
 
-        if integration == "rogerebert":
-            if not values["rogerebert_reviews_url"]:
-                return {
-                    "ok": False,
-                    "integration": integration,
-                    "message": "ROGEREBERT_REVIEWS_URL missing",
-                }
-            rows = await RogerEbertClient(settings.source_timeout_seconds).recent_reviews(
-                values["rogerebert_reviews_url"],
-                limit=20,
-            )
-            recent_rows = [row for row in rows if row.get("year") in {2025, 2026}]
-            return {
-                "ok": True,
-                "integration": integration,
-                "message": (
-                    f"RogerEbert reachable ({len(recent_rows)} rows for years 2025/2026, "
-                    f"{len(rows)} total parsed)"
-                ),
-            }
-
         if integration == "plex":
             if not values["plex_token"]:
                 return {"ok": False, "integration": integration, "message": "PLEX_TOKEN missing"}
@@ -4197,6 +4470,17 @@ async def test_integration(payload: IntegrationTestRequest) -> dict:
                 "integration": integration,
                 "message": f"Ollama reachable ({health['models_count']} models, {values['ollama_model']} {model_status})",
             }
+
+        if integration == "groq":
+            api_key = values.get("groq_api_key", "")
+            if not api_key:
+                return {"ok": False, "integration": integration, "message": "GROQ_API_KEY required"}
+            model = values.get("groq_model") or settings.groq_model or "llama-3.3-70b-versatile"
+            logger.info(f"Testing Groq with model: {model}")
+            from app.clients.groq_client import GroqClient
+            client = GroqClient(api_key=api_key, model=model)
+            success, message = await client.test_connection()
+            return {"ok": success, "integration": integration, "message": message, "details": {"model_used": model}}
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "integration": integration, "message": str(exc)}
 
@@ -4403,7 +4687,7 @@ class MCPInvokeRequest(BaseModel):
     tool: str
     arguments: dict = Field(default_factory=dict)
     user_id: str = "default"
-    provider: str | None = None  # "groq", "ollama", or None (auto)
+    provider: str | None = None  # "ollama" or None (auto)
 
 
 @app.get("/api/mcp/tools")
@@ -4416,14 +4700,14 @@ async def list_mcp_tools() -> dict:
         "llm_available": llm is not None and llm.available,
         "llm_provider": llm.provider if llm and llm.available else None,
         "groq_available": llm.groq_available if llm else False,
+        "groq_model": settings.groq_model,
         "ollama_available": llm.ollama_available if llm else False,
         "ollama_model": settings.ollama_model,
-        "groq_model": settings.groq_model,
     }
 
 
 async def _get_llm_client(provider: str | None = None) -> UnifiedLLMClient | None:
-    """Get unified LLM client for MCP tools."""
+    """Get LLM client (Groq or Ollama)."""
     try:
         return UnifiedLLMClient(
             groq_api_key=settings.groq_api_key,

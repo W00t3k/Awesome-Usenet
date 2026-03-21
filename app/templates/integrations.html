@@ -45,10 +45,20 @@
     }
 
     .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
       font-size: 24px;
       font-weight: 700;
-      color: var(--accent);
+      color: var(--text);
       text-decoration: none;
+    }
+
+    .logo img {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: block;
     }
 
     .nav {
@@ -303,6 +313,11 @@
       margin-bottom: 6px;
     }
 
+    .model-item.active-model {
+      border: 1px solid var(--primary);
+      background: color-mix(in srgb, var(--primary) 10%, var(--bg));
+    }
+
     .model-name {
       font-weight: 500;
       color: var(--text);
@@ -483,7 +498,10 @@
 <body>
   <!-- Header -->
   <header class="header">
-    <a href="/" class="logo">{{ app_title }}</a>
+    <a href="/" class="logo">
+      <img src="/static/logo.svg?v=20260219e" alt="Majic" />
+      <span>{{ app_title }}</span>
+    </a>
     <nav class="nav">
       <a href="/">Movies</a>
       <a href="/tv">TV Station</a>
@@ -509,6 +527,64 @@
       </div>
 
       <div id="settings-feedback"></div>
+    </div>
+
+    <!-- Server Configurations (Plex/Radarr) -->
+    <div class="card">
+      <div class="card-title">
+        <span>Plex Servers</span>
+        <button class="btn btn-primary btn-sm" onclick="openServerModal('plex')">+ Add Plex Server</button>
+      </div>
+      <div id="plex-servers-list">
+        <p style="color: var(--text-dim); text-align: center; padding: 20px;">Loading...</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <span>Radarr Servers</span>
+        <button class="btn btn-primary btn-sm" onclick="openServerModal('radarr')">+ Add Radarr Server</button>
+      </div>
+      <div id="radarr-servers-list">
+        <p style="color: var(--text-dim); text-align: center; padding: 20px;">Loading...</p>
+      </div>
+    </div>
+
+    <!-- Server Modal -->
+    <div id="server-modal" class="modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); z-index:1000; align-items:center; justify-content:center;">
+      <div class="card" style="width:100%; max-width:500px; margin:auto;">
+        <div class="card-title">
+          <span id="server-modal-title">Add Server</span>
+          <button class="btn btn-secondary btn-sm" onclick="closeServerModal()">&times;</button>
+        </div>
+        <form id="server-form">
+          <input type="hidden" id="server-edit-id">
+          <input type="hidden" id="server-type">
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <div>
+              <label class="form-label">Name</label>
+              <input type="text" class="form-input" id="server-name" placeholder="e.g., Home Plex" required>
+            </div>
+            <div>
+              <label class="form-label">Base URL</label>
+              <input type="text" class="form-input" id="server-url" placeholder="http://localhost:32400" required>
+            </div>
+            <div>
+              <label class="form-label" id="server-key-label">Token/API Key</label>
+              <input type="password" class="form-input" id="server-key" placeholder="Token or API Key">
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <input type="checkbox" id="server-default">
+              <label for="server-default" style="font-size:13px;">Set as default</label>
+            </div>
+            <div style="display:flex; gap:8px; margin-top:8px;">
+              <button type="submit" class="btn btn-primary" style="flex:1;">Save</button>
+              <button type="button" class="btn btn-secondary" onclick="closeServerModal()">Cancel</button>
+            </div>
+          </div>
+        </form>
+        <div id="server-form-feedback" style="margin-top:12px;"></div>
+      </div>
     </div>
 
     <div class="two-col">
@@ -566,14 +642,6 @@
       { key: 'rottentomatoes', label: 'Rotten Tomatoes', fields: [{ name: 'rottentomatoes_list_url', label: 'List URL', type: 'text' }] },
       { key: 'rogerebert', label: 'RogerEbert', fields: [{ name: 'rogerebert_reviews_url', label: 'Reviews URL', type: 'text' }] },
       { key: 'releases', label: 'Releases', fields: [{ name: 'releases_url', label: 'URL', type: 'text' }] },
-      { key: 'plex', label: 'Plex', fields: [
-        { name: 'plex_base_url', label: 'Base URL', type: 'text' },
-        { name: 'plex_token', label: 'Token', type: 'password' }
-      ]},
-      { key: 'radarr', label: 'Downloader', fields: [
-        { name: 'radarr_base_url', label: 'Service URL', type: 'text' },
-        { name: 'radarr_api_key', label: 'API Key', type: 'password' }
-      ]},
       { key: 'nzbgeek', label: 'NZBGeek', fields: [
         { name: 'nzbgeek_rss_url', label: 'RSS URL', type: 'text' },
         { name: 'nzbgeek_api_key', label: 'API Key', type: 'password' }
@@ -586,7 +654,11 @@
         { name: 'usenet_base_url', label: 'Base URL', type: 'text' },
         { name: 'usenet_api_key', label: 'API Key', type: 'password' }
       ]},
-      { key: 'ollama', label: 'Ollama (AI)', fields: [
+      { key: 'groq', label: 'Groq Cloud (Free AI)', fields: [
+        { name: 'groq_api_key', label: 'API Key', type: 'password' },
+        { name: 'groq_model', label: 'Model', type: 'text' }
+      ]},
+      { key: 'ollama', label: 'Ollama (Local AI)', fields: [
         { name: 'ollama_base_url', label: 'Base URL', type: 'text' },
         { name: 'ollama_model', label: 'Model', type: 'text' }
       ]}
@@ -747,6 +819,45 @@ ${fieldLines || '  (no fields)'}${detailsText}`;
               : 'Not configured';
         const label = escapeHtml(int.label);
 
+        // Special handling for Groq with model selector
+        if (int.key === 'groq') {
+          const groqApiKey = escapeAttr(currentSettings['groq_api_key'] || '');
+          const groqModel = String(currentSettings['groq_model'] || 'llama-3.3-70b-versatile');
+          const groqModelEscaped = escapeHtml(groqModel);
+
+          return `
+            <div class="integration-row groq-row" data-integration-key="${int.key}">
+              <div>
+                <div class="integration-name">${label}</div>
+                <span class="status-badge ${statusClass}">${statusText}</span>
+              </div>
+              <div class="integration-fields">
+                <div class="integration-field">
+                  <input type="password" class="form-input"
+                         id="groq_api_key"
+                         placeholder="API Key (from console.groq.com)"
+                         value="${groqApiKey}">
+                </div>
+                <div class="integration-field ollama-model-field">
+                  <select id="groq_model" class="form-input ollama-model-select">
+                    <option value="${escapeAttr(groqModel)}">${groqModelEscaped}</option>
+                  </select>
+                </div>
+              </div>
+              <div class="integration-actions">
+                <button class="btn btn-secondary btn-sm" onclick="testIntegration('groq')">Test</button>
+              </div>
+            </div>
+            <div class="ollama-extras" style="border-top: 1px dashed var(--border); margin-top: 8px;">
+              <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+                <span style="font-size: 12px; color: var(--text-dim); width: 100%;">Free tier: 14,400 requests/day | Get API key at <a href="https://console.groq.com" target="_blank" style="color: var(--blue);">console.groq.com</a></span>
+              </div>
+              <div class="models-header">Available Models:</div>
+              <div id="groq-models-list" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;"></div>
+            </div>
+          `;
+        }
+
         // Special handling for Ollama with model selector
         if (int.key === 'ollama') {
           const ollamaBaseUrl = escapeAttr(currentSettings['ollama_base_url'] || 'http://localhost:11434');
@@ -820,12 +931,68 @@ ${fieldLines || '  (no fields)'}${detailsText}`;
         `;
       }).join('');
 
-      // Load Ollama models after rendering
+      // Load models after rendering
+      renderGroqModels();
       refreshOllamaModels();
 
       Object.entries(integrationVerboseResults).forEach(([key, result]) => {
         renderVerboseOutput(key, result);
       });
+    }
+
+    // Groq available models
+    const GROQ_MODELS = [
+      { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B', desc: 'Best quality, 128k context', badge: 'Recommended' },
+      { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B', desc: 'Fastest, instant responses', badge: 'Fast' },
+      { id: 'llama-3.2-11b-vision-preview', name: 'Llama 3.2 Vision', desc: 'Can analyze images', badge: 'Vision' },
+      { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B', desc: 'Strong reasoning, 32k context', badge: '' },
+      { id: 'gemma2-9b-it', name: 'Gemma 2 9B', desc: 'Google model, efficient', badge: '' },
+    ];
+
+    function renderGroqModels() {
+      const select = document.getElementById('groq_model');
+      const listEl = document.getElementById('groq-models-list');
+      if (!select) return;
+
+      const currentModel = String(currentSettings['groq_model'] || 'llama-3.3-70b-versatile');
+
+      // Populate select
+      select.innerHTML = '';
+      for (const model of GROQ_MODELS) {
+        const option = document.createElement('option');
+        option.value = model.id;
+        option.textContent = `${model.name}${model.badge ? ` (${model.badge})` : ''}`;
+        option.selected = model.id === currentModel;
+        select.appendChild(option);
+      }
+
+      // Update setting when changed
+      select.onchange = () => {
+        currentSettings['groq_model'] = select.value;
+      };
+
+      // Render model cards
+      if (listEl) {
+        listEl.innerHTML = GROQ_MODELS.map(model => {
+          const isActive = model.id === currentModel;
+          return `
+            <div class="model-item${isActive ? ' active-model' : ''}" style="cursor: pointer; padding: 8px 12px; border-radius: 6px; background: var(--bg); flex: 1; min-width: 180px;" onclick="selectGroqModel('${model.id}')">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="model-name" style="font-weight: 500;">${escapeHtml(model.name)}</span>
+                ${model.badge ? `<span style="font-size: 10px; padding: 2px 6px; background: var(--surface-2); border-radius: 4px; color: var(--${model.badge === 'Recommended' ? 'green' : model.badge === 'Fast' ? 'yellow' : 'blue'});">${model.badge}</span>` : ''}
+              </div>
+              <div style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">${escapeHtml(model.desc)}</div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    function selectGroqModel(modelId) {
+      currentSettings['groq_model'] = modelId;
+      const select = document.getElementById('groq_model');
+      if (select) select.value = modelId;
+      renderGroqModels();
     }
 
     async function refreshOllamaModels() {
@@ -838,7 +1005,16 @@ ${fieldLines || '  (no fields)'}${detailsText}`;
         const data = await res.json();
 
         if (data.ok && data.models.length > 0) {
-          const currentModel = currentSettings['ollama_model'] || '';
+          const currentModel = String(data.current_model || currentSettings['ollama_model'] || '');
+          const normalizeModel = (value) => String(value || '').trim().toLowerCase();
+          const currentModelNorm = normalizeModel(currentModel);
+          const isCurrentModel = (name) => {
+            const normalized = normalizeModel(name);
+            if (!normalized || !currentModelNorm) return false;
+            if (normalized === currentModelNorm) return true;
+            if (!currentModelNorm.includes(':')) return normalized.split(':')[0] === currentModelNorm;
+            return false;
+          };
           select.innerHTML = '';
 
           for (const model of data.models) {
@@ -852,7 +1028,7 @@ ${fieldLines || '  (no fields)'}${detailsText}`;
             const option = document.createElement('option');
             option.value = name;
             option.textContent = `${name} (${size})`;
-            option.selected = name === currentModel;
+            option.selected = isCurrentModel(name);
             select.appendChild(option);
           }
 
@@ -878,9 +1054,11 @@ ${fieldLines || '  (no fields)'}${detailsText}`;
                 ? `${(sizeBytes / 1e9).toFixed(1)}GB`
                 : 'n/a';
               const params = String(model.details?.parameter_size || '');
+              const active = isCurrentModel(name);
 
               const row = document.createElement('div');
               row.className = 'model-item';
+              if (active) row.classList.add('active-model');
 
               const nameEl = document.createElement('span');
               nameEl.className = 'model-name';
@@ -893,7 +1071,8 @@ ${fieldLines || '  (no fields)'}${detailsText}`;
               const button = document.createElement('button');
               button.className = 'btn btn-ghost btn-xs';
               button.type = 'button';
-              button.textContent = 'Use';
+              button.textContent = active ? 'Using' : 'Use';
+              button.disabled = active;
               button.addEventListener('click', () => selectOllamaModel(name));
 
               row.appendChild(nameEl);
@@ -932,34 +1111,62 @@ ${fieldLines || '  (no fields)'}${detailsText}`;
       }
     }
 
-    function selectOllamaModel(modelName) {
+    function setOllamaStatus(level, message) {
+      const statusEl = document.getElementById('ollama-pull-status');
+      if (!statusEl) return;
+      statusEl.innerHTML = '';
+      const span = document.createElement('span');
+      span.className = level;
+      span.textContent = message;
+      statusEl.appendChild(span);
+    }
+
+    async function selectOllamaModel(modelName) {
+      const model = String(modelName || '').trim();
+      if (!model) return;
+
+      setOllamaStatus('loading', `Switching to ${model}...`);
+
+      try {
+        const res = await fetch('/api/ollama/model', {
+          method: 'POST',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ model })
+        });
+        const data = await res.json();
+        if (!data.ok) {
+          setOllamaStatus('error', data.message || `Failed to use ${model}`);
+          return;
+        }
+
+        currentSettings['ollama_model'] = data.model || model;
+        const select = document.getElementById('ollama_model');
+        if (select) select.value = currentSettings['ollama_model'];
+        setOllamaStatus('success', data.message || `Active model: ${currentSettings['ollama_model']}`);
+        await refreshOllamaModels();
+      } catch (e) {
+        setOllamaStatus('error', `Failed to use model: ${e.message}`);
+      }
+    }
+
+    function selectOllamaModelInField(modelName) {
       const select = document.getElementById('ollama_model');
       if (select) {
         select.value = modelName;
-        // Trigger change to save
         currentSettings['ollama_model'] = modelName;
       }
     }
 
     async function pullOllamaModel(modelName) {
       const input = document.getElementById('ollama-pull-input');
-      const statusEl = document.getElementById('ollama-pull-status');
       const model = modelName || (input ? input.value.trim() : '');
-      const setStatus = (level, message) => {
-        if (!statusEl) return;
-        statusEl.innerHTML = '';
-        const span = document.createElement('span');
-        span.className = level;
-        span.textContent = message;
-        statusEl.appendChild(span);
-      };
 
       if (!model) {
-        setStatus('error', 'Enter a model name');
+        setOllamaStatus('error', 'Enter a model name');
         return;
       }
 
-      setStatus('loading', `Pulling ${model}... (this may take a while)`);
+      setOllamaStatus('loading', `Pulling ${model}... (this may take a while)`);
 
       try {
         const res = await fetch('/api/ollama/pull', {
@@ -970,19 +1177,23 @@ ${fieldLines || '  (no fields)'}${detailsText}`;
         const data = await res.json();
 
         if (res.status === 401 || res.status === 403) {
-          setStatus('error', 'Admin login required to pull models');
+          setOllamaStatus('error', 'Login required to pull models');
           return;
         }
 
         if (data.ok) {
-          setStatus('success', data.message || `Pulled ${model}`);
+          setOllamaStatus('success', data.message || `Pulled ${model}`);
           if (input) input.value = '';
+          if (data.model) {
+            currentSettings['ollama_model'] = data.model;
+            selectOllamaModelInField(data.model);
+          }
           refreshOllamaModels();
         } else {
-          setStatus('error', data.message || 'Pull failed');
+          setOllamaStatus('error', data.message || 'Pull failed');
         }
       } catch (e) {
-        setStatus('error', `Pull failed: ${e.message}`);
+        setOllamaStatus('error', `Pull failed: ${e.message}`);
       }
     }
 
@@ -1012,15 +1223,13 @@ ${fieldLines || '  (no fields)'}${detailsText}`;
       renderIntegrations();
 
       try {
-        showFeedback('settings-feedback', 'Testing integrations before save...', true);
-        const testResults = await computeIntegrationStatus(values);
+        showFeedback('settings-feedback', 'Saving settings...', true);
 
-        // Persist only integrations that actually passed test.
+        // Save all user-entered values (don't clear on failed tests)
         const savePayload = {};
         INTEGRATIONS.forEach(int => {
-          const keep = testResults[int.key] === true;
           int.fields.forEach(field => {
-            savePayload[field.name] = keep ? String(values[field.name] || '').trim() : '';
+            savePayload[field.name] = String(values[field.name] || '').trim();
           });
         });
 
@@ -1033,16 +1242,21 @@ ${fieldLines || '  (no fields)'}${detailsText}`;
 
         if (data.status === 'ok') {
           currentSettings = data.values;
+          renderIntegrations();
+
+          // Test integrations after saving to update status
+          showFeedback('settings-feedback', 'Settings saved. Testing connections...', true);
+          const testResults = await computeIntegrationStatus(data.values);
           integrationStatus = testResults;
           renderIntegrations();
 
           const tested = Object.values(testResults).filter(v => v !== null).length;
-          const kept = Object.values(testResults).filter(v => v === true).length;
-          const removed = tested - kept;
+          const passed = Object.values(testResults).filter(v => v === true).length;
+          const failed = tested - passed;
           showFeedback(
             'settings-feedback',
-            `Saved. Kept ${kept}/${tested} tested integrations${removed > 0 ? ` (${removed} removed)` : ''}.`,
-            kept > 0 || tested === 0
+            `Saved! ${passed}/${tested} integrations connected${failed > 0 ? ` (${failed} failed - check credentials)` : ''}.`,
+            passed > 0 || tested === 0
           );
         } else {
           showFeedback('settings-feedback', 'Failed to save settings', false);
@@ -1251,6 +1465,221 @@ ${fieldLines || '  (no fields)'}${detailsText}`;
     // Initialize
     loadSettings();
     loadSeenMovies();
+    loadServers();
+
+    // ===== Server Management =====
+    let serversList = { plex: [], radarr: [] };
+
+    async function loadServers() {
+      try {
+        const res = await fetch('/api/servers');
+        const data = await res.json();
+        if (data.ok) {
+          serversList.plex = data.servers.filter(s => s.service_type === 'plex');
+          serversList.radarr = data.servers.filter(s => s.service_type === 'radarr');
+          renderServers('plex');
+          renderServers('radarr');
+        }
+      } catch (e) {
+        console.error('Failed to load servers:', e);
+      }
+    }
+
+    function renderServers(type) {
+      const list = serversList[type];
+      const container = document.getElementById(`${type}-servers-list`);
+      if (!container) return;
+
+      if (!list.length) {
+        container.innerHTML = `<p style="color: var(--text-dim); text-align: center; padding: 20px;">No ${type === 'plex' ? 'Plex' : 'Radarr'} servers configured</p>`;
+        return;
+      }
+
+      container.innerHTML = list.map(server => {
+        const isDefault = server.is_default;
+        const keyMasked = server.api_key_masked || '(none)';
+        return `
+          <div class="integration-row" data-server-id="${server.id}">
+            <div>
+              <div class="integration-name">${escapeHtml(server.name)}${isDefault ? ' <span style="color: var(--yellow);">★</span>' : ''}</div>
+              <span class="status-badge pending">${escapeHtml(server.base_url)}</span>
+            </div>
+            <div class="integration-fields" style="font-size:12px; color:var(--text-dim);">
+              Key: ${escapeHtml(keyMasked)}
+            </div>
+            <div class="integration-actions">
+              <button class="btn btn-secondary btn-sm" onclick="testServer(${server.id})">Test</button>
+              ${!isDefault ? `<button class="btn btn-secondary btn-sm" onclick="setDefaultServer(${server.id})">Set Default</button>` : ''}
+              <button class="btn btn-secondary btn-sm" onclick="editServer(${server.id})">Edit</button>
+              <button class="btn btn-secondary btn-sm" onclick="deleteServer(${server.id})" style="color: var(--accent);">Delete</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function openServerModal(type, serverId = null) {
+      const modal = document.getElementById('server-modal');
+      const title = document.getElementById('server-modal-title');
+      const form = document.getElementById('server-form');
+      const feedback = document.getElementById('server-form-feedback');
+
+      document.getElementById('server-type').value = type;
+      document.getElementById('server-edit-id').value = serverId || '';
+      document.getElementById('server-key-label').textContent = type === 'plex' ? 'Token' : 'API Key';
+
+      if (serverId) {
+        const servers = type === 'plex' ? serversList.plex : serversList.radarr;
+        const server = servers.find(s => s.id === serverId);
+        if (server) {
+          title.textContent = `Edit ${type === 'plex' ? 'Plex' : 'Radarr'} Server`;
+          document.getElementById('server-name').value = server.name;
+          document.getElementById('server-url').value = server.base_url;
+          document.getElementById('server-key').value = '';
+          document.getElementById('server-key').placeholder = server.api_key_masked || 'Enter new token';
+          document.getElementById('server-default').checked = server.is_default;
+        }
+      } else {
+        title.textContent = `Add ${type === 'plex' ? 'Plex' : 'Radarr'} Server`;
+        form.reset();
+        document.getElementById('server-default').checked = false;
+      }
+
+      feedback.innerHTML = '';
+      modal.style.display = 'flex';
+    }
+
+    function closeServerModal() {
+      document.getElementById('server-modal').style.display = 'none';
+    }
+
+    function editServer(serverId) {
+      // Find which type
+      let type = 'plex';
+      if (serversList.radarr.find(s => s.id === serverId)) type = 'radarr';
+      openServerModal(type, serverId);
+    }
+
+    document.getElementById('server-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const feedback = document.getElementById('server-form-feedback');
+      const type = document.getElementById('server-type').value;
+      const editId = document.getElementById('server-edit-id').value;
+      const name = document.getElementById('server-name').value.trim();
+      const url = document.getElementById('server-url').value.trim();
+      const key = document.getElementById('server-key').value.trim();
+      const isDefault = document.getElementById('server-default').checked;
+
+      console.log('Server form submit:', { type, editId, name, url, hasKey: !!key, isDefault });
+
+      if (!name || !url) {
+        feedback.innerHTML = '<div class="feedback error">Name and URL are required</div>';
+        return;
+      }
+
+      try {
+        let res;
+        if (editId) {
+          // Update existing
+          const body = { name, base_url: url };
+          if (key) body.api_key = key;
+          console.log('Updating server:', editId, body);
+          res = await fetch(`/api/servers/${editId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+          if (isDefault) {
+            await fetch(`/api/servers/${editId}/default`, { method: 'POST' });
+          }
+        } else {
+          // Create new
+          const payload = {
+            service_type: type,
+            name,
+            base_url: url,
+            api_key: key || null,
+            is_default: isDefault
+          };
+          console.log('Creating server:', payload);
+          res = await fetch('/api/servers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        }
+
+        const data = await res.json();
+        console.log('Server response:', data);
+        if (data.ok) {
+          closeServerModal();
+          loadServers();
+        } else {
+          feedback.innerHTML = `<div class="feedback error">${escapeHtml(data.message)}</div>`;
+        }
+      } catch (err) {
+        console.error('Server form error:', err);
+        feedback.innerHTML = `<div class="feedback error">Error: ${err.message}</div>`;
+      }
+    };
+
+    async function deleteServer(serverId) {
+      if (!confirm('Delete this server configuration?')) return;
+
+      try {
+        const res = await fetch(`/api/servers/${serverId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.ok) {
+          loadServers();
+        } else {
+          alert(data.message || 'Failed to delete');
+        }
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    }
+
+    async function setDefaultServer(serverId) {
+      try {
+        const res = await fetch(`/api/servers/${serverId}/default`, { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) {
+          loadServers();
+        } else {
+          alert(data.message || 'Failed to set default');
+        }
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    }
+
+    async function testServer(serverId) {
+      const row = document.querySelector(`[data-server-id="${serverId}"]`);
+      const badge = row?.querySelector('.status-badge');
+      if (badge) {
+        badge.textContent = 'Testing...';
+        badge.className = 'status-badge pending';
+      }
+
+      try {
+        const res = await fetch(`/api/servers/${serverId}/test`, { method: 'POST' });
+        const data = await res.json();
+        if (badge) {
+          if (data.ok) {
+            badge.textContent = data.message || 'Connected';
+            badge.className = 'status-badge success';
+          } else {
+            badge.textContent = data.message || 'Failed';
+            badge.className = 'status-badge error';
+          }
+        }
+      } catch (e) {
+        if (badge) {
+          badge.textContent = 'Error';
+          badge.className = 'status-badge error';
+        }
+      }
+    }
   </script>
 </body>
 </html>

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from app.agents.base import MovieAgent
 from app.clients.rogerebert_client import RogerEbertClient
+from app.config import limits
 from app.models import AgentContext, MovieCandidate, SourcePayload
 
 
@@ -15,7 +16,21 @@ class RogerEbertAgent(MovieAgent):
         self._reviews_url = reviews_url
         self._client = RogerEbertClient(timeout_seconds=timeout_seconds)
         self._fallback_dataset_path = fallback_dataset_path
-        self._allowed_years = {2025, 2026}
+        # Use configurable year range from limits (default: 1900 to current+2)
+        self._min_year = limits.min_year
+        self._max_year = limits.get_max_year()
+        # None means accept all years; otherwise build a set
+        self._allowed_years: set[int] | None = None
+        if self._min_year is not None or self._max_year is not None:
+            min_y = self._min_year or 1900
+            max_y = self._max_year or 2030
+            self._allowed_years = set(range(min_y, max_y + 1))
+
+    def _year_range_str(self) -> str:
+        """Return a human-readable year range string."""
+        if self._allowed_years is None:
+            return "all years"
+        return f"{self._min_year}-{self._max_year}"
 
     async def collect(self, context: AgentContext) -> SourcePayload:
         # Try RSS feed first (more reliable, not blocked by 403)
@@ -28,7 +43,7 @@ class RogerEbertAgent(MovieAgent):
                     metadata={
                         "notes": (
                             f"Fetched {len(movies)} RogerEbert reviews from RSS feed "
-                            f"(years: {', '.join(str(y) for y in sorted(self._allowed_years))})"
+                            f"(years: {self._year_range_str()})"
                         )
                     },
                 )
@@ -38,11 +53,11 @@ class RogerEbertAgent(MovieAgent):
         # Fallback to web scraping if RSS fails
         if self._reviews_url:
             try:
-                # Fetch ALL reviews for 2025-2026 by paginating
+                # Fetch reviews with configurable pagination
                 rows = await self._client.all_reviews_for_years(
                     base_url=self._reviews_url,
                     years=self._allowed_years,
-                    max_pages=25,  # Up to 25 pages to get all recent reviews
+                    max_pages=limits.rogerebert_max_pages,
                 )
                 movies = self._to_candidates(rows, prefix="rogerebert")
                 return SourcePayload(
@@ -50,8 +65,7 @@ class RogerEbertAgent(MovieAgent):
                     metadata={
                         "notes": (
                             f"Fetched {len(movies)} RogerEbert reviews "
-                            f"(years: {', '.join(str(y) for y in sorted(self._allowed_years))}, "
-                            f"paginated)"
+                            f"(years: {self._year_range_str()}, paginated)"
                         )
                     },
                 )
@@ -77,8 +91,8 @@ class RogerEbertAgent(MovieAgent):
                 movies=movies,
                 metadata={
                     "notes": (
-                        "RogerEbert URL missing, using local seed dataset "
-                        "(filtered to 2025-2026)"
+                        f"RogerEbert URL missing, using local seed dataset "
+                        f"(years: {self._year_range_str()})"
                     )
                 },
             )
@@ -90,7 +104,10 @@ class RogerEbertAgent(MovieAgent):
         for row in rows:
             title = row.get("title")
             year = row.get("year")
-            if not title or not isinstance(year, int) or year not in self._allowed_years:
+            if not title or not isinstance(year, int):
+                continue
+            # If allowed_years is None, accept all years; otherwise check membership
+            if self._allowed_years is not None and year not in self._allowed_years:
                 continue
 
             slug = (

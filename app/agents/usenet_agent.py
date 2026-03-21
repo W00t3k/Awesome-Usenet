@@ -1,15 +1,23 @@
 from __future__ import annotations
 
 import hashlib
+import logging
+from typing import TYPE_CHECKING
 
 from app.agents.base import MovieAgent
 from app.clients.usenet_client import UsenetClient
 from app.models import AgentContext, MovieCandidate, SourcePayload
 from app.services.usenet_parser import parse_release
 
+if TYPE_CHECKING:
+    from app.services.swarm_context import SwarmContext
+
+logger = logging.getLogger(__name__)
+
 
 class UsenetAgent(MovieAgent):
     name = "nzbgeek"
+    supports_llm = True  # Enable LLM features for smart search queries
 
     def __init__(self, rss_url: str | None, api_key: str | None, timeout_seconds: float):
         self._rss_url = rss_url
@@ -17,7 +25,7 @@ class UsenetAgent(MovieAgent):
         # base_url is not used for RSS mode; keep a harmless default for client construction.
         self._client = UsenetClient(base_url="https://api.nzbgeek.info", api_key=api_key or "", timeout_seconds=timeout_seconds)
 
-    async def collect(self, context: AgentContext) -> SourcePayload:
+    async def collect(self, context: AgentContext | SwarmContext) -> SourcePayload:
         if not self._rss_url:
             return SourcePayload(metadata={"notes": "NZBGEEK_RSS_URL missing; skipping NZBGeek RSS"})
         if self._requires_api_key(self._rss_url) and not self._api_key:
@@ -25,19 +33,9 @@ class UsenetAgent(MovieAgent):
                 metadata={"notes": "NZBGEEK_API_KEY missing for RSS URL template; skipping NZBGeek RSS"}
             )
 
-        # Fetch RSS feed
+        # Fetch RSS feed only (fast) - API search is done separately in Just Added section
         rows = await self._client.movie_rss_feed(self._rss_url, api_key=self._api_key)
-
-        # Also try API search for more results if API key available
-        api_rows: list[dict] = []
-        if self._api_key:
-            try:
-                api_rows = await self._client.movie_search_all(query="", max_results=500)
-            except Exception:
-                pass  # API search is optional
-
-        # Combine RSS + API results
-        all_rows = rows + api_rows
+        all_rows = rows
         movies: list[MovieCandidate] = []
         seen_titles: set[str] = set()
 
@@ -67,9 +65,18 @@ class UsenetAgent(MovieAgent):
             if parsed.is_hdr:
                 tags.append("hdr")
 
+            posted_at = str(
+                row.get("pub_date")
+                or row.get("pubDate")
+                or row.get("posted")
+                or row.get("usenetdate")
+                or row.get("date")
+                or ""
+            ).strip()
+
             evidence = ["NZBGeek RSS release listing"]
-            if row.get("pub_date"):
-                evidence = [f"NZBGeek RSS item: {row['pub_date']}"]
+            if posted_at:
+                evidence.append(f"NZBGeek item date: {posted_at}")
 
             # Include quality details in evidence
             quality_info = []
@@ -94,12 +101,21 @@ class UsenetAgent(MovieAgent):
                 )
             )
 
+        # Share discoveries with other agents if SwarmContext
+        if hasattr(context, "collaborate"):
+            unusual_titles = [m.title for m in movies if "unusual-discovery" in m.source_tags]
+            if unusual_titles:
+                await context.collaborate(
+                    agent_name=self.name,
+                    message=f"Found {len(unusual_titles)} unusual releases",
+                    data={"unusual_titles": unusual_titles[:10]},
+                )
+
         return SourcePayload(
             movies=movies,
             metadata={
-                "notes": f"Loaded {len(movies)} unique movies from NZBGeek",
+                "notes": f"Loaded {len(movies)} movies from NZBGeek RSS",
                 "rss_count": len(rows),
-                "api_count": len(api_rows),
             },
         )
 

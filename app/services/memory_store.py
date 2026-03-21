@@ -216,6 +216,25 @@ class MemoryStore:
                 "CREATE INDEX IF NOT EXISTS idx_movie_cache_title ON movie_cache(title_key)"
             )
 
+            # Server configurations (multi-instance Plex/Radarr support)
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS server_configs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    service_type TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    base_url TEXT NOT NULL,
+                    api_key TEXT,
+                    is_default INTEGER DEFAULT 0,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(service_type, name)
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_server_configs_type ON server_configs(service_type)"
+            )
+
             # Run migrations for existing databases
             self._run_migrations(conn)
 
@@ -954,3 +973,262 @@ class MemoryStore:
             "with_overview": with_overview,
             "available_usenet": available,
         }
+
+    # ===== Server Configuration Methods (Multi-instance Plex/Radarr) =====
+
+    def list_servers(self, service_type: str | None = None) -> list[dict]:
+        """List all server configurations, optionally filtered by service type."""
+        with self._connect() as conn:
+            if service_type:
+                rows = conn.execute(
+                    """
+                    SELECT id, service_type, name, base_url, api_key, is_default, created_at
+                    FROM server_configs
+                    WHERE service_type = ?
+                    ORDER BY is_default DESC, name ASC
+                    """,
+                    (service_type,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT id, service_type, name, base_url, api_key, is_default, created_at
+                    FROM server_configs
+                    ORDER BY service_type, is_default DESC, name ASC
+                    """
+                ).fetchall()
+        return [
+            {
+                "id": row["id"],
+                "service_type": row["service_type"],
+                "name": row["name"],
+                "base_url": row["base_url"],
+                "api_key": row["api_key"],
+                "is_default": bool(row["is_default"]),
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ]
+
+    def get_server(self, server_id: int) -> dict | None:
+        """Get a server configuration by ID."""
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, service_type, name, base_url, api_key, is_default, created_at
+                FROM server_configs
+                WHERE id = ?
+                """,
+                (server_id,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "id": row["id"],
+            "service_type": row["service_type"],
+            "name": row["name"],
+            "base_url": row["base_url"],
+            "api_key": row["api_key"],
+            "is_default": bool(row["is_default"]),
+            "created_at": row["created_at"],
+        }
+
+    def get_default_server(self, service_type: str) -> dict | None:
+        """Get the default server for a service type."""
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, service_type, name, base_url, api_key, is_default, created_at
+                FROM server_configs
+                WHERE service_type = ? AND is_default = 1
+                """,
+                (service_type,),
+            ).fetchone()
+        if not row:
+            # Return the first server if no default is set
+            row = conn.execute(
+                """
+                SELECT id, service_type, name, base_url, api_key, is_default, created_at
+                FROM server_configs
+                WHERE service_type = ?
+                ORDER BY id ASC
+                LIMIT 1
+                """,
+                (service_type,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "id": row["id"],
+            "service_type": row["service_type"],
+            "name": row["name"],
+            "base_url": row["base_url"],
+            "api_key": row["api_key"],
+            "is_default": bool(row["is_default"]),
+            "created_at": row["created_at"],
+        }
+
+    def create_server(
+        self,
+        service_type: str,
+        name: str,
+        base_url: str,
+        api_key: str | None = None,
+        is_default: bool = False,
+    ) -> int | None:
+        """Create a new server configuration."""
+        try:
+            with self._transaction() as conn:
+                # If setting as default, clear other defaults for this service type
+                if is_default:
+                    conn.execute(
+                        "UPDATE server_configs SET is_default = 0 WHERE service_type = ?",
+                        (service_type,),
+                    )
+                cursor = conn.execute(
+                    """
+                    INSERT INTO server_configs (service_type, name, base_url, api_key, is_default)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (service_type, name, base_url, api_key, 1 if is_default else 0),
+                )
+                return cursor.lastrowid
+        except Exception as e:
+            logger.error(f"Failed to create server {name}: {e}")
+            return None
+
+    def update_server(
+        self,
+        server_id: int,
+        name: str | None = None,
+        base_url: str | None = None,
+        api_key: str | None = None,
+    ) -> bool:
+        """Update a server configuration."""
+        updates = []
+        params: list = []
+        if name is not None:
+            updates.append("name = ?")
+            params.append(name)
+        if base_url is not None:
+            updates.append("base_url = ?")
+            params.append(base_url)
+        if api_key is not None:
+            updates.append("api_key = ?")
+            params.append(api_key)
+
+        if not updates:
+            return False
+
+        params.append(server_id)
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    f"UPDATE server_configs SET {', '.join(updates)} WHERE id = ?",
+                    params,
+                )
+            return True
+        except Exception:
+            return False
+
+    def delete_server(self, server_id: int) -> bool:
+        """Delete a server configuration."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM server_configs WHERE id = ?",
+                (server_id,),
+            )
+        return cursor.rowcount > 0
+
+    def set_default_server(self, server_id: int) -> bool:
+        """Set a server as the default for its service type."""
+        server = self.get_server(server_id)
+        if not server:
+            return False
+
+        try:
+            with self._transaction() as conn:
+                # Clear other defaults for this service type
+                conn.execute(
+                    "UPDATE server_configs SET is_default = 0 WHERE service_type = ?",
+                    (server["service_type"],),
+                )
+                # Set this one as default
+                conn.execute(
+                    "UPDATE server_configs SET is_default = 1 WHERE id = ?",
+                    (server_id,),
+                )
+            return True
+        except Exception:
+            return False
+
+    def migrate_env_servers(
+        self,
+        plex_base_url: str | None,
+        plex_token: str | None,
+        radarr_base_url: str | None,
+        radarr_api_key: str | None,
+    ) -> dict:
+        """Migrate existing env-based server configs to the database."""
+        migrated = {"plex": False, "radarr": False}
+
+        # Only migrate if no servers exist yet
+        existing_plex = self.list_servers("plex")
+        existing_radarr = self.list_servers("radarr")
+
+        if not existing_plex and plex_base_url:
+            server_id = self.create_server(
+                service_type="plex",
+                name="Default Plex",
+                base_url=plex_base_url,
+                api_key=plex_token,
+                is_default=True,
+            )
+            migrated["plex"] = server_id is not None
+
+        if not existing_radarr and radarr_base_url:
+            server_id = self.create_server(
+                service_type="radarr",
+                name="Default Radarr",
+                base_url=radarr_base_url,
+                api_key=radarr_api_key,
+                is_default=True,
+            )
+            migrated["radarr"] = server_id is not None
+
+        return migrated
+
+    def _ensure_cache(self) -> None:
+        """Ensure instance-level cache exists."""
+        if not hasattr(self, "_mem_cache"):
+            self._mem_cache: dict = {}
+            self._mem_cache_expiry: dict = {}
+
+    def get_cache(self, key: str) -> dict | None:
+        """Get a cached value if not expired."""
+        import time
+        self._ensure_cache()
+        if key in self._mem_cache:
+            if key in self._mem_cache_expiry and time.time() > self._mem_cache_expiry[key]:
+                del self._mem_cache[key]
+                del self._mem_cache_expiry[key]
+                return None
+            return self._mem_cache[key]
+        return None
+
+    def set_cache(self, key: str, value: dict, ttl_seconds: int = 3600) -> None:
+        """Set a cached value with TTL."""
+        import time
+        self._ensure_cache()
+        self._mem_cache[key] = value
+        self._mem_cache_expiry[key] = time.time() + ttl_seconds
+
+    def clear_cache(self, key: str | None = None) -> None:
+        """Clear cache entry or all cache."""
+        self._ensure_cache()
+        if key:
+            self._mem_cache.pop(key, None)
+            self._mem_cache_expiry.pop(key, None)
+        else:
+            self._mem_cache.clear()
+            self._mem_cache_expiry.clear()

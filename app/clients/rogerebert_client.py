@@ -157,16 +157,17 @@ class RogerEbertClient:
     async def all_reviews_for_years(
         self,
         base_url: str,
-        years: set[int],
-        max_pages: int = 20,
+        years: set[int] | None = None,
+        max_pages: int = 200,
     ) -> list[dict[str, Any]]:
         """
-        Fetch ALL reviews for specific years by paginating through the reviews.
-        Stops when we hit reviews older than our target years.
+        Fetch ALL reviews by paginating through the reviews.
+        If years is None, fetches all reviews (unlimited).
+        If years is a set, filters to those specific years and stops when past min_year.
         """
         all_reviews: list[dict[str, Any]] = []
         seen_urls: set[str] = set()
-        min_year = min(years)
+        min_year = min(years) if years else None
 
         for page in range(1, max_pages + 1):
             # RogerEbert uses ?page=N for pagination
@@ -193,17 +194,20 @@ class RogerEbertClient:
 
                 if isinstance(year, int):
                     oldest_year_on_page = min(oldest_year_on_page, year)
-                    if year in years:
+                    # If years is None (unlimited), accept all reviews
+                    # Otherwise, only accept reviews in the specified years set
+                    if years is None or year in years:
                         all_reviews.append(review)
                         new_reviews += 1
 
-            # Stop if we've gone past our target years
-            if oldest_year_on_page < min_year:
-                break
-
-            # Stop if this page had no new reviews for our years
-            if new_reviews == 0 and oldest_year_on_page < min_year:
-                break
+            # Only apply early termination if we have a years filter
+            if min_year is not None:
+                # Stop if we've gone past our target years
+                if oldest_year_on_page < min_year:
+                    break
+                # Stop if this page had no new reviews for our years
+                if new_reviews == 0 and oldest_year_on_page < min_year:
+                    break
 
             # Small delay between pages to be polite
             await asyncio.sleep(0.5)

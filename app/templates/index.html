@@ -11,7 +11,7 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@400;600;700;800&family=Outfit:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/static/styles.css?v=20260301j" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260311c" />
   </head>
   <body>
     <div class="app">
@@ -38,6 +38,10 @@
             <a class="nav-dropdown-item" href="/integrations">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
               <span>Integrations</span>
+            </a>
+            <a class="nav-dropdown-item" href="/chat">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
+              <span>AI Chat</span>
             </a>
             <div class="nav-dropdown-divider"></div>
             <div class="nav-dropdown-item theme-row">
@@ -132,7 +136,7 @@
 
           <section class="card">
             <div class="card-header">
-              <h3>2026 Calendar</h3>
+              <h3>Release Calendar</h3>
             </div>
             <div id="release-calendar" class="calendar"></div>
           </section>
@@ -307,12 +311,13 @@
         <main class="main">
           <div id="now-downloading" class="now-downloading hidden"></div>
 
-          <section class="hero">
+          <section class="hero" id="motd-section" style="display:none;">
             <div class="hero-bg" id="hero-backdrop"></div>
             <div class="hero-content">
               <span class="hero-label">Movie of the Day</span>
-              <div id="movie-day-content" class="hero-movie-content">
-                <p class="meta">Loading recommendations...</p>
+              <span class="motd-source-label" id="motd-source"></span>
+              <div id="motd-container" class="hero-movie-content">
+                <p class="meta">Loading...</p>
               </div>
             </div>
           </section>
@@ -611,6 +616,6 @@
       </div>
     </div>
 
-    <script src="/static/app.js?v=20260301j" defer></script>
+    <script src="/static/app.js?v=20260311c" defer></script>
   </body>
 </html>
