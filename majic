@@ -1,0 +1,312 @@
+#!/usr/bin/env python3
+"""
+Majic Movie Selector CLI
+
+A sexy command-line interface for managing the Majic Movie Selector server.
+
+Usage:
+    ./majic start       Start server with supervision (auto-restart, health checks)
+    ./majic stop        Stop the running server gracefully
+    ./majic status      Show current server status
+    ./majic logs        Tail the server logs
+    ./majic restart     Restart the server
+    ./majic dev         Start in development mode (no supervision)
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import os
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+# Add project root to path
+PROJECT_ROOT = Path(__file__).parent.resolve()
+sys.path.insert(0, str(PROJECT_ROOT))
+
+# Ensure we use the virtualenv if running from project directory
+VENV_PYTHON = PROJECT_ROOT / ".venv" / "bin" / "python"
+if VENV_PYTHON.exists() and sys.executable != str(VENV_PYTHON):
+    # Re-exec with virtualenv python
+    os.execv(str(VENV_PYTHON), [str(VENV_PYTHON)] + sys.argv)
+
+
+def get_pid_file(port: int) -> Path:
+    return PROJECT_ROOT / f".server-{port}.pid"
+
+
+def get_log_file(port: int) -> Path:
+    return PROJECT_ROOT / f"server-{port}.log"
+
+
+def get_running_pid(port: int) -> int | None:
+    """Get the PID of a running server, or None if not running."""
+    pid_file = get_pid_file(port)
+    if not pid_file.exists():
+        return None
+
+    try:
+        pid = int(pid_file.read_text().strip())
+        # Check if process exists
+        os.kill(pid, 0)
+        return pid
+    except (ValueError, ProcessLookupError, PermissionError):
+        # PID file is stale
+        pid_file.unlink(missing_ok=True)
+        return None
+
+
+def cmd_start(args: argparse.Namespace) -> int:
+    """Start the server with supervision."""
+    from rich.console import Console
+    console = Console()
+
+    port = args.port
+    pid = get_running_pid(port)
+
+    if pid:
+        console.print(f"[yellow]Server already running[/yellow] PID={pid}")
+        console.print(f"Use [cyan]./majic stop[/cyan] first, or [cyan]./majic restart[/cyan]")
+        return 1
+
+    console.print(f"[bold magenta]Starting Majic Movie Selector[/bold magenta] on port {port}")
+
+    try:
+        from app.supervisor import MajicSupervisor
+        supervisor = MajicSupervisor(host=args.host, port=port)
+
+        # Handle Ctrl+C gracefully
+        def signal_handler(sig, frame):
+            console.print("\n[yellow]Shutting down...[/yellow]")
+            supervisor.stop()
+
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+
+        # Run the supervisor
+        asyncio.run(supervisor.run_supervised())
+        return 0
+
+    except ImportError as e:
+        console.print(f"[red]Missing dependency:[/red] {e}")
+        console.print("Run: [cyan]pip install rich[/cyan]")
+        return 1
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Interrupted[/yellow]")
+        return 0
+
+
+def cmd_stop(args: argparse.Namespace) -> int:
+    """Stop the running server."""
+    from rich.console import Console
+    console = Console()
+
+    port = args.port
+    pid = get_running_pid(port)
+
+    if not pid:
+        console.print("[yellow]Server not running[/yellow]")
+        return 0
+
+    console.print(f"[yellow]Stopping server[/yellow] PID={pid}")
+
+    try:
+        # Send SIGTERM
+        os.kill(pid, signal.SIGTERM)
+
+        # Wait for process to exit
+        for _ in range(100):  # 10 seconds max
+            try:
+                os.kill(pid, 0)
+                time.sleep(0.1)
+            except ProcessLookupError:
+                break
+        else:
+            # Force kill
+            console.print("[yellow]Force killing...[/yellow]")
+            os.kill(pid, signal.SIGKILL)
+
+        # Clean up PID file
+        get_pid_file(port).unlink(missing_ok=True)
+        console.print("[green]Server stopped[/green]")
+        return 0
+
+    except ProcessLookupError:
+        console.print("[green]Server already stopped[/green]")
+        get_pid_file(port).unlink(missing_ok=True)
+        return 0
+    except PermissionError:
+        console.print(f"[red]Permission denied[/red] Cannot stop PID {pid}")
+        return 1
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    """Show server status."""
+    from rich.console import Console
+    console = Console()
+
+    try:
+        from app.supervisor import MajicSupervisor
+        supervisor = MajicSupervisor(host=args.host, port=args.port)
+        asyncio.run(supervisor.run_status())
+        return 0
+    except ImportError:
+        # Fallback without rich
+        port = args.port
+        pid = get_running_pid(port)
+        if pid:
+            print(f"Server running: PID={pid}, Port={port}")
+        else:
+            print("Server not running")
+        return 0
+
+
+def cmd_logs(args: argparse.Namespace) -> int:
+    """Tail the server logs."""
+    from rich.console import Console
+    console = Console()
+
+    log_file = get_log_file(args.port)
+    if not log_file.exists():
+        console.print("[yellow]No log file found[/yellow]")
+        return 1
+
+    console.print(f"[cyan]Tailing {log_file}[/cyan] (Ctrl+C to stop)")
+
+    try:
+        # Use tail -f for live following
+        process = subprocess.Popen(
+            ["tail", "-f", "-n", str(args.lines), str(log_file)],
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+        )
+        process.wait()
+        return 0
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Stopped[/yellow]")
+        return 0
+
+
+def cmd_restart(args: argparse.Namespace) -> int:
+    """Restart the server."""
+    from rich.console import Console
+    console = Console()
+
+    console.print("[yellow]Restarting server...[/yellow]")
+
+    # Stop first
+    args_copy = argparse.Namespace(**vars(args))
+    cmd_stop(args_copy)
+
+    # Wait a moment
+    time.sleep(1)
+
+    # Start again
+    return cmd_start(args)
+
+
+def cmd_dev(args: argparse.Namespace) -> int:
+    """Start in development mode (uvicorn with reload)."""
+    from rich.console import Console
+    console = Console()
+
+    console.print(f"[bold cyan]Starting development server[/bold cyan] on port {args.port}")
+    console.print("[dim]Press Ctrl+C to stop[/dim]")
+
+    venv_uvicorn = PROJECT_ROOT / ".venv" / "bin" / "uvicorn"
+    if venv_uvicorn.exists():
+        uvicorn_cmd = str(venv_uvicorn)
+    else:
+        uvicorn_cmd = "uvicorn"
+
+    try:
+        subprocess.run(
+            [
+                uvicorn_cmd,
+                "app.main:app",
+                "--host", args.host,
+                "--port", str(args.port),
+                "--reload",
+            ],
+            cwd=PROJECT_ROOT,
+        )
+        return 0
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Stopped[/yellow]")
+        return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Majic Movie Selector CLI",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  ./majic start              Start with auto-restart and health monitoring
+  ./majic start --port 8080  Start on a different port
+  ./majic status             Check if server is running
+  ./majic logs               Watch live server logs
+  ./majic restart            Graceful restart
+  ./majic dev                Development mode with hot reload
+        """,
+    )
+
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host to bind to (default: 127.0.0.1)",
+    )
+    parser.add_argument(
+        "--port", "-p",
+        type=int,
+        default=8443,
+        help="Port to run on (default: 8443)",
+    )
+
+    subparsers = parser.add_subparsers(dest="command", help="Command to run")
+
+    # Start command
+    start_parser = subparsers.add_parser("start", help="Start server with supervision")
+    start_parser.set_defaults(func=cmd_start)
+
+    # Stop command
+    stop_parser = subparsers.add_parser("stop", help="Stop the running server")
+    stop_parser.set_defaults(func=cmd_stop)
+
+    # Status command
+    status_parser = subparsers.add_parser("status", help="Show server status")
+    status_parser.set_defaults(func=cmd_status)
+
+    # Logs command
+    logs_parser = subparsers.add_parser("logs", help="Tail server logs")
+    logs_parser.add_argument(
+        "-n", "--lines",
+        type=int,
+        default=50,
+        help="Number of lines to show (default: 50)",
+    )
+    logs_parser.set_defaults(func=cmd_logs)
+
+    # Restart command
+    restart_parser = subparsers.add_parser("restart", help="Restart the server")
+    restart_parser.set_defaults(func=cmd_restart)
+
+    # Dev command
+    dev_parser = subparsers.add_parser("dev", help="Start in development mode")
+    dev_parser.set_defaults(func=cmd_dev)
+
+    args = parser.parse_args()
+
+    if not args.command:
+        parser.print_help()
+        return 0
+
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

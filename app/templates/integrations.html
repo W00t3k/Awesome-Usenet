@@ -4,21 +4,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ app_title }} - Settings</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css?v=20260321a" />
   <style>
-    :root {
-      --bg: #0f0f0f;
-      --surface: #1a1a1a;
-      --surface-2: #242424;
-      --border: #333;
-      --text: #f5f5f5;
-      --text-dim: #888;
-      --accent: #e50914;
-      --accent-hover: #f6121d;
-      --green: #46d369;
-      --yellow: #f5c518;
-      --blue: #0080ff;
+    /* Map integrations page vars to the shared theme system */
+    :root, [data-theme] {
+      --surface: var(--bg-card);
+      --surface-2: var(--bg-hover);
+      --text-dim: var(--text-muted);
+      --accent: var(--primary);
+      --accent-hover: var(--primary-hover);
+      --green: var(--success);
+      --yellow: var(--warning);
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -502,11 +500,28 @@
       <img src="/static/logo.svg?v=20260219e" alt="Majic" />
       <span>{{ app_title }}</span>
     </a>
-    <nav class="nav">
-      <a href="/">Movies</a>
-      <a href="/tv">TV Station</a>
-      <a href="/usenet">Usenet</a>
-      <a href="/integrations" class="active">Settings</a>
+    <nav class="nav" style="display:flex;gap:20px;align-items:center;">
+      <a href="/" style="color:var(--text-muted);text-decoration:none;font-size:14px;font-weight:500;">Movies</a>
+      <a href="/chat" style="color:var(--text-muted);text-decoration:none;font-size:14px;font-weight:500;">AI Chat</a>
+      <a href="/integrations" style="color:var(--text);text-decoration:none;font-size:14px;font-weight:600;">Settings</a>
+      <select id="int-theme-select" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;cursor:pointer;" aria-label="Theme">
+        <option value="dark">Dark</option>
+        <option value="midnight">Midnight</option>
+        <option value="ocean">Ocean</option>
+        <option value="forest">Forest</option>
+        <option value="sunset">Sunset</option>
+        <option value="light">Light</option>
+        <option value="aurora">Aurora</option>
+        <option value="ember">Ember</option>
+        <option value="slate">Slate</option>
+        <option value="noir">Noir</option>
+        <option value="cobalt">Cobalt</option>
+        <option value="rose">Rose</option>
+        <option value="ice">Ice</option>
+        <option value="neon">Neon</option>
+        <option value="vintage">Vintage</option>
+        <option value="cinema">Cinema</option>
+      </select>
     </nav>
   </header>
 
@@ -773,30 +788,25 @@ ${fieldLines || '  (no fields)'}${detailsText}`;
     }
 
     async function computeIntegrationStatus(values) {
-      const results = {};
-      for (const int of INTEGRATIONS) {
-        if (!integrationHasInput(int, values)) {
-          results[int.key] = null;
-          continue;
-        }
-        try {
-          const tested = await requestIntegrationTest(int.key, values);
-          results[int.key] = tested.ok;
-        } catch {
-          results[int.key] = false;
-        }
-      }
-      return results;
+      const entries = await Promise.all(
+        INTEGRATIONS.map(async int => {
+          if (!integrationHasInput(int, values)) return [int.key, null];
+          try {
+            const tested = await requestIntegrationTest(int.key, values);
+            return [int.key, tested.ok];
+          } catch {
+            return [int.key, false];
+          }
+        })
+      );
+      return Object.fromEntries(entries);
     }
 
     async function loadSettings() {
       try {
         const settingsRes = await fetch('/api/settings');
         const settingsData = await settingsRes.json();
-
         currentSettings = settingsData.values || {};
-        integrationStatus = {};
-        renderIntegrations();
         integrationStatus = await computeIntegrationStatus(currentSettings);
         renderIntegrations();
       } catch (e) {
@@ -1149,14 +1159,6 @@ ${fieldLines || '  (no fields)'}${detailsText}`;
       }
     }
 
-    function selectOllamaModelInField(modelName) {
-      const select = document.getElementById('ollama_model');
-      if (select) {
-        select.value = modelName;
-        currentSettings['ollama_model'] = modelName;
-      }
-    }
-
     async function pullOllamaModel(modelName) {
       const input = document.getElementById('ollama-pull-input');
       const model = modelName || (input ? input.value.trim() : '');
@@ -1186,7 +1188,8 @@ ${fieldLines || '  (no fields)'}${detailsText}`;
           if (input) input.value = '';
           if (data.model) {
             currentSettings['ollama_model'] = data.model;
-            selectOllamaModelInField(data.model);
+            const sel = document.getElementById('ollama_model');
+            if (sel) sel.value = data.model;
           }
           refreshOllamaModels();
         } else {
@@ -1463,6 +1466,16 @@ ${fieldLines || '  (no fields)'}${detailsText}`;
     };
 
     // Initialize
+    (function() {
+      const saved = localStorage.getItem('majic_theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', saved);
+      const sel = document.getElementById('int-theme-select');
+      if (sel) sel.value = saved;
+      if (sel) sel.addEventListener('change', () => {
+        document.documentElement.setAttribute('data-theme', sel.value);
+        localStorage.setItem('majic_theme', sel.value);
+      });
+    })();
     loadSettings();
     loadSeenMovies();
     loadServers();
@@ -1570,8 +1583,6 @@ ${fieldLines || '  (no fields)'}${detailsText}`;
       const key = document.getElementById('server-key').value.trim();
       const isDefault = document.getElementById('server-default').checked;
 
-      console.log('Server form submit:', { type, editId, name, url, hasKey: !!key, isDefault });
-
       if (!name || !url) {
         feedback.innerHTML = '<div class="feedback error">Name and URL are required</div>';
         return;
@@ -1583,7 +1594,6 @@ ${fieldLines || '  (no fields)'}${detailsText}`;
           // Update existing
           const body = { name, base_url: url };
           if (key) body.api_key = key;
-          console.log('Updating server:', editId, body);
           res = await fetch(`/api/servers/${editId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -1601,7 +1611,6 @@ ${fieldLines || '  (no fields)'}${detailsText}`;
             api_key: key || null,
             is_default: isDefault
           };
-          console.log('Creating server:', payload);
           res = await fetch('/api/servers', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1610,7 +1619,6 @@ ${fieldLines || '  (no fields)'}${detailsText}`;
         }
 
         const data = await res.json();
-        console.log('Server response:', data);
         if (data.ok) {
           closeServerModal();
           loadServers();

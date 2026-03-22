@@ -3336,7 +3336,8 @@ function renderReleaseCalendar() {
   today.setHours(23, 59, 59, 999);
   const activeSources = activeCalendarSourceFilter();
 
-  const cutoff = new Date(new Date().getFullYear() + 1, 0, 1); // Jan 1 of next year
+  const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0); // start of today — show everything from today onwards
 
   const rows = (calendarItems || [])
     .filter((item) => {
@@ -3397,7 +3398,8 @@ function renderReleaseCalendar() {
 
       const info = document.createElement("div");
       info.className = "cal-info";
-      info.innerHTML = `<span class="cal-date">${shortMonth} ${day}</span><span class="cal-title">${item.title}</span>`;
+      const imdbUrl = `https://www.imdb.com/find/?q=${encodeURIComponent(item.title + (item.year ? " " + item.year : ""))}`;
+      info.innerHTML = `<span class="cal-date">${shortMonth} ${day}</span><a class="cal-title cal-title-link" href="${imdbUrl}" target="_blank" rel="noopener" title="View on IMDb">${item.title}</a>`;
 
       const dlBtn = document.createElement("button");
       dlBtn.type = "button";
@@ -5166,20 +5168,52 @@ aiChatInput?.addEventListener("focus", () => {
 });
 
 async function checkAiStatus() {
-  if (!aiStatus) return;
+  const navPill = document.getElementById("nav-ai-provider");
   try {
-    const res = await fetch("/api/integrations");
+    const res = await fetch("/api/chat/status");
     const data = await res.json();
-    if (data.ollama) {
-      aiStatus.textContent = "Ready";
-      aiStatus.className = "ai-status-badge connected";
-    } else {
-      aiStatus.textContent = "Setup";
-      aiStatus.className = "ai-status-badge disconnected";
+    const provider = data.provider || null;
+    const available = data.available;
+
+    // Sidebar badge
+    if (aiStatus) {
+      if (available && provider === "groq") {
+        aiStatus.textContent = "Groq";
+        aiStatus.className = "ai-status-badge connected groq";
+      } else if (available && provider === "ollama") {
+        aiStatus.textContent = "Ollama";
+        aiStatus.className = "ai-status-badge connected ollama";
+      } else {
+        aiStatus.textContent = "Setup";
+        aiStatus.className = "ai-status-badge disconnected";
+      }
+    }
+
+    // Nav pill
+    if (navPill) {
+      if (available && provider === "groq") {
+        navPill.textContent = "⚡ Groq";
+        navPill.className = "nav-ai-provider-pill groq";
+        navPill.title = "Using Groq Cloud AI";
+      } else if (available && provider === "ollama") {
+        navPill.textContent = "🖥 Ollama";
+        navPill.className = "nav-ai-provider-pill ollama";
+        navPill.title = "Using local Ollama AI";
+      } else {
+        navPill.textContent = "AI Offline";
+        navPill.className = "nav-ai-provider-pill offline";
+        navPill.title = "No AI provider configured";
+      }
     }
   } catch {
-    aiStatus.textContent = "Offline";
-    aiStatus.className = "ai-status-badge disconnected";
+    if (aiStatus) {
+      aiStatus.textContent = "Offline";
+      aiStatus.className = "ai-status-badge disconnected";
+    }
+    if (navPill) {
+      navPill.textContent = "AI Offline";
+      navPill.className = "nav-ai-provider-pill offline";
+    }
   }
 }
 
@@ -5279,8 +5313,13 @@ const maxLabel = document.getElementById("year-slider-max-label");
 if (maxLabel) maxLabel.textContent = MAX_YEAR;
 if (yearSlider) {
   yearSlider.max = MAX_YEAR;
-  yearSlider.value = MAX_YEAR;
+  yearSlider.value = CURRENT_YEAR;
 }
+// Default filter to current year on load
+selectedYear = CURRENT_YEAR;
+updateYearDisplay(CURRENT_YEAR);
+if (yearFromEl) yearFromEl.value = CURRENT_YEAR;
+if (yearToEl) yearToEl.value = CURRENT_YEAR;
 
 if (loadAllBtn) {
   loadAllBtn.addEventListener("click", () => {

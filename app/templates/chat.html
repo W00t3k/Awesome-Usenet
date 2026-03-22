@@ -4,21 +4,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ app_title }} - AI Chat</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css?v=20260321a" />
   <style>
-    :root {
-      --bg: #0f0f0f;
-      --surface: #1a1a1a;
-      --surface-2: #242424;
-      --border: #333;
-      --text: #f5f5f5;
-      --text-dim: #888;
-      --accent: #e50914;
-      --accent-hover: #f6121d;
-      --green: #46d369;
-      --yellow: #f5c518;
-      --blue: #0080ff;
+    /* Map chat page vars to the shared theme system */
+    :root, [data-theme] {
+      --surface: var(--bg-card);
+      --surface-2: var(--bg-hover);
+      --text-dim: var(--text-muted);
+      --accent: var(--primary);
+      --accent-hover: var(--primary-hover);
+      --green: var(--success);
+      --yellow: var(--warning);
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -486,12 +484,28 @@
       <img src="/static/logo.svg?v=20260219e" alt="Majic" />
       <span>{{ app_title }}</span>
     </a>
-    <nav class="nav">
-      <a href="/">Movies</a>
-      <a href="/tv">TV Station</a>
-      <a href="/usenet">Usenet</a>
-      <a href="/chat" class="active">AI Chat</a>
-      <a href="/integrations">Settings</a>
+    <nav class="nav" style="display:flex;gap:20px;align-items:center;">
+      <a href="/" style="color:var(--text-muted);text-decoration:none;font-size:14px;font-weight:500;">Movies</a>
+      <a href="/chat" style="color:var(--text);text-decoration:none;font-size:14px;font-weight:600;">AI Chat</a>
+      <a href="/integrations" style="color:var(--text-muted);text-decoration:none;font-size:14px;font-weight:500;">Settings</a>
+      <select id="chat-theme-select" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;cursor:pointer;" aria-label="Theme">
+        <option value="dark">Dark</option>
+        <option value="midnight">Midnight</option>
+        <option value="ocean">Ocean</option>
+        <option value="forest">Forest</option>
+        <option value="sunset">Sunset</option>
+        <option value="light">Light</option>
+        <option value="aurora">Aurora</option>
+        <option value="ember">Ember</option>
+        <option value="slate">Slate</option>
+        <option value="noir">Noir</option>
+        <option value="cobalt">Cobalt</option>
+        <option value="rose">Rose</option>
+        <option value="ice">Ice</option>
+        <option value="neon">Neon</option>
+        <option value="vintage">Vintage</option>
+        <option value="cinema">Cinema</option>
+      </select>
     </nav>
   </header>
 
@@ -804,7 +818,20 @@
       inputEl.focus();
     }
 
-    // Initialize
+    // Initialize theme
+    (function() {
+      const saved = localStorage.getItem('majic_theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', saved);
+      const sel = document.getElementById('chat-theme-select');
+      if (sel) {
+        sel.value = saved;
+        sel.addEventListener('change', () => {
+          document.documentElement.setAttribute('data-theme', sel.value);
+          localStorage.setItem('majic_theme', sel.value);
+        });
+      }
+    })();
+
     checkProvider();
     inputEl.focus();
   </script>

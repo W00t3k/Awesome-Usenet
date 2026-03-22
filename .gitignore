@@ -1,5 +1,38 @@
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
 .venv/
+*.egg-info/
+
+# Environment
 .env
+
+# Logs & PIDs
+*.log
+*.pid
+
+# Data / DB
 data/memory.sqlite
+data/memory.sqlite-shm
+data/memory.sqlite-wal
+data/rottentomatoes_cache.json
+data/plex_channel_schedule.json
+
+# MCP config (local only)
+.mcp.json
+
+# Caches & test artefacts
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+.claude/
