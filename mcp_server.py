@@ -20,8 +20,9 @@ except ImportError:
     print("MCP not installed. Run: pip install mcp", file=sys.stderr)
     sys.exit(1)
 
-# App imports - add app to path
-sys.path.insert(0, "/Users/w00tock/Desktop/STuFF /Majic Movie selector")
+# App imports - add project root to path dynamically
+from pathlib import Path as _Path
+sys.path.insert(0, str(_Path(__file__).resolve().parent))
 
 from app.config import settings
 from app.clients.llm_client import UnifiedLLMClient

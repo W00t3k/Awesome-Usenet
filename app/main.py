@@ -11,6 +11,7 @@ import asyncio
 import contextlib
 import logging
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -183,9 +184,43 @@ async def _reload_runtime() -> None:
 app_state.register_reload(_reload_runtime)
 
 
+# ── Plex channel scheduler state ───────────────────────────────────────────────
+
+_plex_scheduler_stop = asyncio.Event()
+_plex_scheduler_task: asyncio.Task | None = None
+
+
 # ── FastAPI app ────────────────────────────────────────────────────────────────
 
-app = FastAPI(title=settings.app_title)
+@asynccontextmanager
+async def _lifespan(application: FastAPI):  # noqa: ARG001
+    global _plex_scheduler_task
+    _plex_scheduler_stop.clear()
+    if _plex_scheduler_task is None or _plex_scheduler_task.done():
+        _plex_scheduler_task = asyncio.create_task(_run_plex_channel_scheduler_loop())
+    enrichment_service.start()
+    logger.info("Background enrichment service started")
+    yield
+    logger.info("Initiating graceful shutdown...")
+    enrichment_service.stop()
+    _plex_scheduler_stop.set()
+    task = _plex_scheduler_task
+    if task is not None:
+        logger.info("Waiting for scheduler task to complete...")
+        with contextlib.suppress(asyncio.CancelledError):
+            try:
+                await asyncio.wait_for(task, timeout=10.0)
+            except TimeoutError:
+                logger.warning("Scheduler task did not complete in time, cancelling...")
+                task.cancel()
+        _plex_scheduler_task = None
+    from app.clients.http_client import close_shared_client
+    await close_shared_client()
+    await asyncio.sleep(0.5)
+    logger.info("Shutdown complete")
+
+
+app = FastAPI(title=settings.app_title, lifespan=_lifespan)
 templates = Jinja2Templates(directory=str(base_dir / "templates"))
 app.mount("/static", StaticFiles(directory=str(base_dir / "static")), name="static")
 
@@ -208,10 +243,6 @@ for _router_module in (pages, chat, settings_router, servers, seen, usenet, down
 
 
 # ── Plex channel scheduler ─────────────────────────────────────────────────────
-
-_plex_scheduler_stop = asyncio.Event()
-_plex_scheduler_task: asyncio.Task | None = None
-
 
 async def _run_plex_channel_scheduler_loop() -> None:
     from app.routers.plex import _refresh_plex_tv_channel
@@ -237,35 +268,4 @@ async def _run_plex_channel_scheduler_loop() -> None:
             continue
 
 
-# ── Lifespan events ────────────────────────────────────────────────────────────
-
-@app.on_event("startup")
-async def _on_startup() -> None:
-    global _plex_scheduler_task
-    _plex_scheduler_stop.clear()
-    if _plex_scheduler_task is None or _plex_scheduler_task.done():
-        _plex_scheduler_task = asyncio.create_task(_run_plex_channel_scheduler_loop())
-    enrichment_service.start()
-    logger.info("Background enrichment service started")
-
-
-@app.on_event("shutdown")
-async def _on_shutdown() -> None:
-    global _plex_scheduler_task
-    logger.info("Initiating graceful shutdown...")
-    enrichment_service.stop()
-    _plex_scheduler_stop.set()
-    task = _plex_scheduler_task
-    if task is not None:
-        logger.info("Waiting for scheduler task to complete...")
-        with contextlib.suppress(asyncio.CancelledError):
-            try:
-                await asyncio.wait_for(task, timeout=10.0)
-            except TimeoutError:
-                logger.warning("Scheduler task did not complete in time, cancelling...")
-                task.cancel()
-        _plex_scheduler_task = None
-    from app.clients.http_client import close_shared_client
-    await close_shared_client()
-    await asyncio.sleep(0.5)
-    logger.info("Shutdown complete")
+# Lifespan is defined above and passed to FastAPI() — no @app.on_event needed.

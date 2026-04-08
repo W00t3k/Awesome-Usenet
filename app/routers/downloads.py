@@ -248,49 +248,56 @@ async def get_radarr_monitored(server_id: int | None = Query(default=None)) -> d
 
 
 @router.get("/api/download-health")
-async def get_download_health() -> dict:
-    if not settings.radarr_api_key:
-        return {"configured": False, "ok": False, "message": "Download service API key not configured", "queue_count": 0, "active_count": 0, "download_rate_human": None, "items": []}
+async def get_download_health(server_id: int | None = Query(default=None)) -> dict:
+    radarr_config = _get_radarr_config(server_id)
+    if not radarr_config:
+        return {"configured": False, "ok": False, "message": "No Radarr server configured", "queue_count": 0, "active_count": 0, "download_rate_human": None, "items": []}
+    base_url, api_key = radarr_config
+    if not api_key:
+        return {"configured": False, "ok": False, "message": "Radarr API key missing", "queue_count": 0, "active_count": 0, "download_rate_human": None, "items": []}
     try:
-        queue_rows = await RadarrClient(base_url=settings.radarr_base_url, api_key=settings.radarr_api_key, timeout_seconds=settings.source_timeout_seconds).queue_details()
+        queue_rows = await RadarrClient(base_url=base_url, api_key=api_key, timeout_seconds=settings.source_timeout_seconds).queue_details()
         payload = _build_download_health_payload(queue_rows)
-        return {"configured": True, "ok": True, "message": "ok", "radarr_base_url": settings.radarr_base_url, **payload}
+        return {"configured": True, "ok": True, "message": "ok", "radarr_base_url": base_url, **payload}
     except Exception as exc:
         return {"configured": True, "ok": False, "message": str(exc), "queue_count": 0, "active_count": 0, "download_rate_human": None, "items": []}
 
 
 @router.get("/api/disk-space")
-async def get_disk_space() -> dict:
+async def get_disk_space(server_id: int | None = Query(default=None)) -> dict:
     disks = []
     seen_sizes: set[int] = set()
 
-    if settings.radarr_api_key:
-        try:
-            radarr_disks = await RadarrClient(base_url=settings.radarr_base_url, api_key=settings.radarr_api_key, timeout_seconds=settings.source_timeout_seconds).disk_space()
-            for d in radarr_disks:
-                free_bytes = d.get("freeSpace", 0)
-                total_bytes = d.get("totalSpace", 0)
-                if total_bytes == 0:
-                    continue
-                path = d.get("path", "")
-                if any(skip in path for skip in ["/System/Volumes", "/private/var", "/AppTranslocation", "/tmp", "/var/folders"]):
-                    continue
-                if total_bytes in seen_sizes:
-                    continue
-                seen_sizes.add(total_bytes)
-                used_bytes = total_bytes - free_bytes
-                percent_used = (used_bytes / total_bytes * 100) if total_bytes > 0 else 0
-                label = d.get("label", "") or path
-                if label == "/" or not label:
-                    label = "Movies Drive"
-                disks.append({
-                    "path": path, "label": label, "free_bytes": free_bytes, "total_bytes": total_bytes,
-                    "used_bytes": used_bytes, "percent_used": round(percent_used, 1),
-                    "free_human": _human_size(free_bytes), "total_human": _human_size(total_bytes),
-                    "used_human": _human_size(used_bytes), "source": "radarr",
-                })
-        except Exception as exc:
-            logger.warning(f"Failed to get Radarr disk space: {exc}")
+    radarr_config = _get_radarr_config(server_id)
+    if radarr_config:
+        base_url, api_key = radarr_config
+        if api_key:
+            try:
+                radarr_disks = await RadarrClient(base_url=base_url, api_key=api_key, timeout_seconds=settings.source_timeout_seconds).disk_space()
+                for d in radarr_disks:
+                    free_bytes = d.get("freeSpace", 0)
+                    total_bytes = d.get("totalSpace", 0)
+                    if total_bytes == 0:
+                        continue
+                    path = d.get("path", "")
+                    if any(skip in path for skip in ["/System/Volumes", "/private/var", "/AppTranslocation", "/tmp", "/var/folders"]):
+                        continue
+                    if total_bytes in seen_sizes:
+                        continue
+                    seen_sizes.add(total_bytes)
+                    used_bytes = total_bytes - free_bytes
+                    percent_used = (used_bytes / total_bytes * 100) if total_bytes > 0 else 0
+                    label = d.get("label", "") or path
+                    if label == "/" or not label:
+                        label = "Movies Drive"
+                    disks.append({
+                        "path": path, "label": label, "free_bytes": free_bytes, "total_bytes": total_bytes,
+                        "used_bytes": used_bytes, "percent_used": round(percent_used, 1),
+                        "free_human": _human_size(free_bytes), "total_human": _human_size(total_bytes),
+                        "used_human": _human_size(used_bytes), "source": "radarr",
+                    })
+            except Exception as exc:
+                logger.warning(f"Failed to get Radarr disk space: {exc}")
 
     if not disks:
         import shutil
@@ -310,11 +317,15 @@ async def get_disk_space() -> dict:
 
 
 @router.get("/api/download-history")
-async def get_download_history(limit: int = Query(default=40, ge=1, le=limits.browse_max)) -> dict:
-    if not settings.radarr_api_key:
-        return {"configured": False, "ok": False, "message": "Download service API key not configured", "items": []}
+async def get_download_history(limit: int = Query(default=40, ge=1, le=limits.browse_max), server_id: int | None = Query(default=None)) -> dict:
+    radarr_config = _get_radarr_config(server_id)
+    if not radarr_config:
+        return {"configured": False, "ok": False, "message": "No Radarr server configured", "items": []}
+    base_url, api_key = radarr_config
+    if not api_key:
+        return {"configured": False, "ok": False, "message": "Radarr API key missing", "items": []}
     try:
-        rows = await RadarrClient(base_url=settings.radarr_base_url, api_key=settings.radarr_api_key, timeout_seconds=settings.source_timeout_seconds).history(limit=limit)
+        rows = await RadarrClient(base_url=base_url, api_key=api_key, timeout_seconds=settings.source_timeout_seconds).history(limit=limit)
         return {"configured": True, "ok": True, "message": "ok", "items": _build_download_history_payload(rows, limit=limit)}
     except Exception as exc:
         return {"configured": True, "ok": False, "message": str(exc), "items": []}
@@ -322,10 +333,11 @@ async def get_download_history(limit: int = Query(default=40, ge=1, le=limits.br
 
 @router.post("/api/download-history/clear")
 async def clear_download_history(payload: DownloadHistoryClearRequest) -> dict:
-    if not settings.radarr_api_key:
-        return {"status": "error", "message": "Download service API key not configured", "auto_download": payload.auto_download, "auto_delete": payload.auto_delete, "grabbed_count": 0, "deleted_count": 0, "queued_count": 0, "cleared_at": datetime.now(UTC).isoformat(), "errors": []}
-
-    client = RadarrClient(base_url=settings.radarr_base_url, api_key=settings.radarr_api_key, timeout_seconds=settings.source_timeout_seconds)
+    radarr_config = _get_radarr_config()
+    if not radarr_config or not radarr_config[1]:
+        return {"status": "error", "message": "No Radarr server configured", "auto_download": payload.auto_download, "auto_delete": payload.auto_delete, "grabbed_count": 0, "deleted_count": 0, "queued_count": 0, "cleared_at": datetime.now(UTC).isoformat(), "errors": []}
+    base_url, api_key = radarr_config
+    client = RadarrClient(base_url=base_url, api_key=api_key, timeout_seconds=settings.source_timeout_seconds)
     rows = await client.history(limit=payload.limit)
 
     grabbed_movie_ids: set[int] = set()
@@ -369,10 +381,12 @@ async def clear_download_history(payload: DownloadHistoryClearRequest) -> dict:
 
 @router.post("/api/download-cancel")
 async def cancel_download(payload: DownloadCancelRequest) -> dict:
-    if not settings.radarr_api_key:
-        return {"ok": False, "message": "Download service API key not configured"}
+    radarr_config = _get_radarr_config()
+    if not radarr_config or not radarr_config[1]:
+        return {"ok": False, "message": "No Radarr server configured"}
+    base_url, api_key = radarr_config
     try:
-        await RadarrClient(base_url=settings.radarr_base_url, api_key=settings.radarr_api_key, timeout_seconds=settings.source_timeout_seconds).remove_queue_item(queue_id=payload.queue_id, remove_from_client=payload.remove_from_client, blocklist=payload.blocklist)
+        await RadarrClient(base_url=base_url, api_key=api_key, timeout_seconds=settings.source_timeout_seconds).remove_queue_item(queue_id=payload.queue_id, remove_from_client=payload.remove_from_client, blocklist=payload.blocklist)
         return {"ok": True, "message": f"Cancelled queue item {payload.queue_id}"}
     except Exception as exc:
         return {"ok": False, "message": str(exc)}
@@ -380,10 +394,12 @@ async def cancel_download(payload: DownloadCancelRequest) -> dict:
 
 @router.post("/api/download-cancel-all")
 async def cancel_all_downloads() -> dict:
-    if not settings.radarr_api_key:
-        return {"ok": False, "cancelled": 0, "errors": [], "message": "Download service API key not configured"}
+    radarr_config = _get_radarr_config()
+    if not radarr_config or not radarr_config[1]:
+        return {"ok": False, "cancelled": 0, "errors": [], "message": "No Radarr server configured"}
+    base_url, api_key = radarr_config
     try:
-        client = RadarrClient(base_url=settings.radarr_base_url, api_key=settings.radarr_api_key, timeout_seconds=settings.source_timeout_seconds)
+        client = RadarrClient(base_url=base_url, api_key=api_key, timeout_seconds=settings.source_timeout_seconds)
         queue_rows = await client.queue_details()
         cancelled = 0
         errors: list[str] = []
@@ -403,10 +419,12 @@ async def cancel_all_downloads() -> dict:
 
 @router.post("/api/monitor")
 async def monitor_movie(payload: DownloadMovieRequest) -> dict:
-    if not settings.radarr_api_key:
-        return {"ok": False, "status": "skipped", "message": "Download service not configured"}
+    radarr_config = _get_radarr_config()
+    if not radarr_config or not radarr_config[1]:
+        return {"ok": False, "status": "skipped", "message": "No Radarr server configured"}
+    base_url, api_key = radarr_config
     try:
-        result = await RadarrClient(base_url=settings.radarr_base_url, api_key=settings.radarr_api_key, timeout_seconds=settings.source_timeout_seconds).ensure_movie_monitored(title=payload.title, year=payload.year)
+        result = await RadarrClient(base_url=base_url, api_key=api_key, timeout_seconds=settings.source_timeout_seconds).ensure_movie_monitored(title=payload.title, year=payload.year)
         return {"ok": True, **result}
     except Exception as exc:
         return {"ok": False, "status": "error", "message": str(exc)}
@@ -414,10 +432,12 @@ async def monitor_movie(payload: DownloadMovieRequest) -> dict:
 
 @router.post("/api/download")
 async def download_movie(payload: DownloadMovieRequest) -> dict:
-    if not settings.radarr_api_key:
-        return {"ok": False, "status": "skipped", "message": "Download service not configured"}
+    radarr_config = _get_radarr_config()
+    if not radarr_config or not radarr_config[1]:
+        return {"ok": False, "status": "skipped", "message": "No Radarr server configured"}
+    base_url, api_key = radarr_config
     try:
-        result = await RadarrClient(base_url=settings.radarr_base_url, api_key=settings.radarr_api_key, timeout_seconds=settings.source_timeout_seconds).ensure_movie_wanted(title=payload.title, year=payload.year)
+        result = await RadarrClient(base_url=base_url, api_key=api_key, timeout_seconds=settings.source_timeout_seconds).ensure_movie_wanted(title=payload.title, year=payload.year)
         return {"ok": True, **result}
     except Exception as exc:
         return {"ok": False, "status": "error", "message": str(exc)}
@@ -426,6 +446,8 @@ async def download_movie(payload: DownloadMovieRequest) -> dict:
 @router.post("/api/download-release")
 async def download_specific_release(payload: DownloadReleaseRequest) -> dict:
     import httpx
+
+    radarr_config = _get_radarr_config()
 
     if settings.sabnzbd_url and settings.sabnzbd_api_key:
         try:
@@ -436,9 +458,9 @@ async def download_specific_release(payload: DownloadReleaseRequest) -> dict:
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("status"):
-                    if settings.radarr_api_key:
+                    if radarr_config and radarr_config[1]:
                         try:
-                            await RadarrClient(base_url=settings.radarr_base_url, api_key=settings.radarr_api_key, timeout_seconds=5.0).ensure_movie_monitored(title=payload.title, year=payload.year)
+                            await RadarrClient(base_url=radarr_config[0], api_key=radarr_config[1], timeout_seconds=5.0).ensure_movie_monitored(title=payload.title, year=payload.year)
                         except Exception:
                             pass
                     short_title = (payload.raw_title or payload.title)[:50]
@@ -447,11 +469,11 @@ async def download_specific_release(payload: DownloadReleaseRequest) -> dict:
         except Exception as sab_exc:
             return {"ok": False, "status": "error", "message": f"SABnzbd error: {sab_exc}"}
 
-    if settings.radarr_api_key:
+    if radarr_config and radarr_config[1]:
         try:
-            result = await RadarrClient(base_url=settings.radarr_base_url, api_key=settings.radarr_api_key, timeout_seconds=settings.source_timeout_seconds).ensure_movie_wanted(title=payload.title, year=payload.year)
+            result = await RadarrClient(base_url=radarr_config[0], api_key=radarr_config[1], timeout_seconds=settings.source_timeout_seconds).ensure_movie_wanted(title=payload.title, year=payload.year)
             return {"ok": True, "status": "queued", "message": "Added to Radarr queue (configure SABNZBD_URL for direct download)", **result}
         except Exception as exc:
             return {"ok": False, "status": "error", "message": str(exc)}
 
-    return {"ok": False, "status": "skipped", "message": "No download service configured. Add SABNZBD_URL and SABNZBD_API_KEY to .env"}
+    return {"ok": False, "status": "skipped", "message": "No download service configured"}

@@ -6,9 +6,8 @@
   <title>{{ app_title }} - Settings</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=20260321a" />
+  <link rel="stylesheet" href="/static/styles.css?v=20260405a" />
   <style>
-    /* Map integrations page vars to the shared theme system */
     :root, [data-theme] {
       --surface: var(--bg-card);
       --surface-2: var(--bg-hover);
@@ -18,9 +17,7 @@
       --green: var(--success);
       --yellow: var(--warning);
     }
-
     * { box-sizing: border-box; margin: 0; padding: 0; }
-
     body {
       font-family: 'Inter', -apple-system, sans-serif;
       background: var(--bg);
@@ -28,8 +25,6 @@
       line-height: 1.5;
       min-height: 100vh;
     }
-
-    /* Header */
     .header {
       background: var(--surface);
       border-bottom: 1px solid var(--border);
@@ -41,7 +36,6 @@
       align-items: center;
       justify-content: space-between;
     }
-
     .logo {
       display: flex;
       align-items: center;
@@ -51,20 +45,8 @@
       color: var(--text);
       text-decoration: none;
     }
-
-    .logo img {
-      width: 32px;
-      height: 32px;
-      border-radius: 8px;
-      display: block;
-    }
-
-    .nav {
-      display: flex;
-      gap: 24px;
-      align-items: center;
-    }
-
+    .logo img { width: 32px; height: 32px; border-radius: 8px; }
+    .nav { display: flex; gap: 24px; align-items: center; }
     .nav a {
       color: var(--text-dim);
       text-decoration: none;
@@ -72,66 +54,299 @@
       font-weight: 500;
       transition: color 0.2s;
     }
-
     .nav a:hover, .nav a.active { color: var(--text); }
-
-    /* Main */
     .main {
       padding: 32px;
-      max-width: 1200px;
+      max-width: 1000px;
       margin: 0 auto;
     }
-
     .page-title {
       font-size: 28px;
       font-weight: 700;
       margin-bottom: 8px;
     }
-
     .page-subtitle {
       color: var(--text-dim);
       margin-bottom: 32px;
     }
-
-    /* Cards */
     .card {
       background: var(--surface);
       border-radius: 12px;
       padding: 24px;
       margin-bottom: 24px;
     }
-
-    .card-title {
-      font-size: 18px;
-      font-weight: 600;
-      margin-bottom: 16px;
+    .card-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      margin-bottom: 20px;
     }
-
-    /* Form Elements */
-    .form-grid {
-      display: grid;
-      gap: 16px;
+    .card-title {
+      font-size: 18px;
+      font-weight: 600;
     }
-
-    .form-row {
-      display: grid;
-      grid-template-columns: 140px 1fr 100px;
-      gap: 12px;
+    .btn {
+      display: inline-flex;
       align-items: center;
-      padding: 12px 16px;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: all 0.15s;
+    }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-secondary {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: var(--surface-2); }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+    .btn-icon { padding: 6px 8px; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Server Cards */
+    .server-grid {
+      display: grid;
+      gap: 12px;
+    }
+    .server-card {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px;
+      background: var(--surface-2);
+      border-radius: 10px;
+      border: 1px solid transparent;
+      transition: border-color 0.15s;
+    }
+    .server-card:hover { border-color: var(--border); }
+    .server-card.is-default { border-color: var(--yellow); }
+    .server-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .server-info { flex: 1; min-width: 0; }
+    .server-name {
+      font-weight: 600;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .server-name .default-star { color: var(--yellow); font-size: 12px; }
+    .server-url {
+      font-size: 12px;
+      color: var(--text-dim);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .server-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 12px;
+      background: var(--bg);
+      color: var(--text-dim);
+    }
+    .server-status.connected { background: rgba(70, 211, 105, 0.15); color: var(--green); }
+    .server-status.error { background: rgba(229, 9, 20, 0.15); color: var(--accent); }
+    .server-actions {
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-dim);
+    }
+    .empty-state p { margin-bottom: 16px; }
+
+    /* Integration List */
+    .integration-list { display: grid; gap: 12px; }
+    .integration-item {
+      display: grid;
+      grid-template-columns: 140px 1fr auto;
+      gap: 16px;
+      align-items: center;
+      padding: 14px 16px;
+      background: var(--surface-2);
+      border-radius: 10px;
+    }
+    .integration-label {
+      font-weight: 500;
+      font-size: 14px;
+    }
+    .integration-fields {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .integration-fields input {
+      flex: 1;
+      min-width: 180px;
+      padding: 8px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 13px;
+    }
+    .integration-fields input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .integration-fields input::placeholder { color: var(--text-dim); }
+    .integration-status {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 12px;
+      background: var(--bg);
+      color: var(--text-dim);
+    }
+    .integration-status.ok { background: rgba(70, 211, 105, 0.15); color: var(--green); }
+    .integration-status.err { background: rgba(229, 9, 20, 0.15); color: var(--accent); }
+
+    /* AI Section */
+    .ai-section {
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+      border: 1px solid rgba(99, 102, 241, 0.2);
+    }
+    .ai-provider {
+      padding: 16px;
+      background: var(--surface-2);
+      border-radius: 10px;
+      margin-bottom: 12px;
+    }
+    .ai-provider:last-child { margin-bottom: 0; }
+    .ai-provider-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .ai-provider-name {
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .ai-provider-fields {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .ai-provider-fields input,
+    .ai-provider-fields select {
+      flex: 1;
+      min-width: 160px;
+      padding: 8px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 13px;
+    }
+    .model-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 12px;
+    }
+    .model-chip {
+      padding: 4px 10px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .model-chip:hover { border-color: var(--text-dim); }
+    .model-chip.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
+
+    /* Seen Movies */
+    .seen-controls {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .seen-controls input { flex: 1; }
+    .seen-list {
+      max-height: 350px;
+      overflow-y: auto;
+    }
+    .seen-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
       background: var(--surface-2);
       border-radius: 8px;
+      margin-bottom: 6px;
     }
+    .seen-item-title { font-weight: 500; font-size: 14px; }
+    .seen-item-meta { font-size: 12px; color: var(--text-dim); }
 
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 24px;
+      width: 100%;
+      max-width: 420px;
+      margin: 20px;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .modal-title { font-size: 18px; font-weight: 600; }
+    .modal-close {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      font-size: 20px;
+      cursor: pointer;
+      padding: 4px;
+    }
+    .form-group { margin-bottom: 16px; }
     .form-label {
+      display: block;
       font-size: 13px;
-      font-weight: 600;
-      color: var(--text);
+      font-weight: 500;
+      margin-bottom: 6px;
     }
-
     .form-input {
       width: 100%;
       padding: 10px 14px;
@@ -139,1555 +354,531 @@
       border: 1px solid var(--border);
       border-radius: 6px;
       color: var(--text);
-      font-size: 13px;
-    }
-
-    .form-input:focus {
-      outline: none;
-      border-color: var(--accent);
-    }
-
-    .form-input::placeholder {
-      color: var(--text-dim);
-    }
-
-    /* Buttons */
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      padding: 10px 20px;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      border: none;
-      transition: all 0.2s;
-    }
-
-    .btn-primary {
-      background: var(--accent);
-      color: white;
-    }
-
-    .btn-primary:hover { background: var(--accent-hover); }
-
-    .btn-secondary {
-      background: var(--surface-2);
-      color: var(--text);
-      border: 1px solid var(--border);
-    }
-
-    .btn-secondary:hover { background: var(--border); }
-
-    .btn-success {
-      background: var(--green);
-      color: black;
-    }
-
-    .btn-sm {
-      padding: 6px 12px;
-      font-size: 12px;
-    }
-
-    .btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    /* Status Badge */
-    .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 10px;
-      border-radius: 20px;
-      font-size: 11px;
-      font-weight: 600;
-    }
-
-    .status-badge.success {
-      background: rgba(70, 211, 105, 0.2);
-      color: var(--green);
-    }
-
-    .status-badge.error {
-      background: rgba(229, 9, 20, 0.2);
-      color: var(--accent);
-    }
-
-    .status-badge.pending {
-      background: rgba(136, 136, 136, 0.2);
-      color: var(--text-dim);
-    }
-
-    /* Integration Row */
-    .integration-row {
-      display: grid;
-      grid-template-columns: 120px 1fr auto;
-      gap: 16px;
-      align-items: center;
-      padding: 16px;
-      background: var(--surface-2);
-      border-radius: 8px;
-      margin-bottom: 12px;
-    }
-
-    .integration-name {
-      font-weight: 600;
       font-size: 14px;
     }
-
-    .integration-fields {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-
-    .integration-field {
-      flex: 1;
-      min-width: 200px;
-    }
-
-    .integration-actions {
-      display: flex;
-      gap: 8px;
-    }
-
-    .integration-verbose {
-      grid-column: 1 / -1;
-      margin-top: 10px;
-      padding: 10px 12px;
-      background: #121212;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: #cfd3dc;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-      font-size: 11px;
-      line-height: 1.4;
-      white-space: pre-wrap;
-      overflow-x: auto;
-    }
-
-    /* Ollama extras */
-    .ollama-model-field {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-
-    .ollama-model-select {
-      flex: 1;
-    }
-
-    .ollama-extras {
-      background: var(--surface-2);
-      border-radius: 8px;
-      padding: 16px;
-      margin-bottom: 12px;
-      margin-top: -8px;
-      border-top: 1px dashed var(--border);
-    }
-
-    .ollama-models-list {
-      margin-bottom: 12px;
-    }
-
-    .models-header {
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text-dim);
-      margin-bottom: 8px;
-    }
-
-    .model-item {
+    .form-input:focus { outline: none; border-color: var(--accent); }
+    .form-checkbox {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 8px 12px;
-      background: var(--bg);
-      border-radius: 6px;
-      margin-bottom: 6px;
-    }
-
-    .model-item.active-model {
-      border: 1px solid var(--primary);
-      background: color-mix(in srgb, var(--primary) 10%, var(--bg));
-    }
-
-    .model-name {
-      font-weight: 500;
-      color: var(--text);
-    }
-
-    .model-info {
-      font-size: 12px;
-      color: var(--text-dim);
-      flex: 1;
-    }
-
-    .no-models {
-      color: var(--text-dim);
+      gap: 8px;
       font-size: 13px;
-      font-style: italic;
-      padding: 12px;
-      text-align: center;
     }
-
-    .ollama-pull-section {
+    .form-actions {
       display: flex;
-      gap: 8px;
-      margin-bottom: 12px;
+      gap: 10px;
+      margin-top: 20px;
     }
+    .form-actions .btn { flex: 1; }
 
-    .ollama-pull-section input {
-      flex: 1;
-    }
-
-    .ollama-pull-status {
-      font-size: 13px;
-      min-height: 20px;
-      margin-bottom: 8px;
-    }
-
-    .ollama-pull-status .loading {
-      color: var(--yellow);
-    }
-
-    .ollama-pull-status .success {
-      color: var(--green);
-    }
-
-    .ollama-pull-status .error {
-      color: var(--accent);
-    }
-
-    .ollama-suggestions {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .suggestion-label {
-      font-size: 12px;
-      color: var(--text-dim);
-    }
-
-    .btn-xs {
-      padding: 4px 8px;
-      font-size: 11px;
-    }
-
-    .btn-ghost {
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--text-dim);
-    }
-
-    .btn-ghost:hover {
-      background: var(--border);
-      color: var(--text);
-    }
-
-    /* Feedback */
     .feedback {
-      padding: 12px 16px;
+      padding: 10px 14px;
       border-radius: 6px;
       font-size: 13px;
       margin-top: 16px;
     }
+    .feedback.success { background: rgba(70, 211, 105, 0.15); color: var(--green); }
+    .feedback.error { background: rgba(229, 9, 20, 0.15); color: var(--accent); }
 
-    .feedback.success {
-      background: rgba(70, 211, 105, 0.15);
-      color: var(--green);
-    }
-
-    .feedback.error {
-      background: rgba(229, 9, 20, 0.15);
-      color: var(--accent);
-    }
-
-    /* Seen Movies Section */
-    .seen-controls {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 16px;
-      flex-wrap: wrap;
-    }
-
-    .seen-list {
-      max-height: 400px;
-      overflow-y: auto;
-    }
-
-    .seen-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 12px 16px;
-      background: var(--surface-2);
-      border-radius: 6px;
-      margin-bottom: 8px;
-    }
-
-    .seen-item-info {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .seen-item-title {
-      font-weight: 500;
-    }
-
-    .seen-item-meta {
-      font-size: 12px;
-      color: var(--text-dim);
-    }
-
-    .plex-library {
-      max-height: 300px;
-      overflow-y: auto;
-      margin-bottom: 16px;
-    }
-
-    .plex-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 8px 12px;
-      background: var(--surface-2);
-      border-radius: 6px;
-      margin-bottom: 6px;
-      cursor: pointer;
-    }
-
-    .plex-item:hover {
-      background: var(--border);
-    }
-
-    .plex-item.selected {
-      background: rgba(229, 9, 20, 0.2);
-      border: 1px solid var(--accent);
-    }
-
-    .plex-item input[type="checkbox"] {
-      accent-color: var(--accent);
-    }
-
-    /* Two Column Layout */
     .two-col {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 24px;
     }
-
-    @media (max-width: 900px) {
-      .two-col {
-        grid-template-columns: 1fr;
-      }
-      .integration-row {
-        grid-template-columns: 1fr;
-      }
+    @media (max-width: 800px) {
+      .two-col { grid-template-columns: 1fr; }
+      .integration-item { grid-template-columns: 1fr; gap: 10px; }
     }
   </style>
 </head>
 <body>
-  <!-- Header -->
   <header class="header">
     <a href="/" class="logo">
-      <img src="/static/logo.svg?v=20260219e" alt="Majic" />
+      <img src="/static/logo.svg" alt="" />
       <span>{{ app_title }}</span>
     </a>
-    <nav class="nav" style="display:flex;gap:20px;align-items:center;">
-      <a href="/" style="color:var(--text-muted);text-decoration:none;font-size:14px;font-weight:500;">Movies</a>
-      <a href="/chat" style="color:var(--text-muted);text-decoration:none;font-size:14px;font-weight:500;">AI Chat</a>
-      <a href="/integrations" style="color:var(--text);text-decoration:none;font-size:14px;font-weight:600;">Settings</a>
-      <select id="int-theme-select" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;cursor:pointer;" aria-label="Theme">
+    <nav class="nav">
+      <a href="/">Movies</a>
+      <a href="/chat">AI Chat</a>
+      <a href="/integrations" class="active">Settings</a>
+      <select id="theme-select" class="form-input" style="width:auto;padding:6px 10px;">
         <option value="dark">Dark</option>
         <option value="midnight">Midnight</option>
         <option value="ocean">Ocean</option>
         <option value="forest">Forest</option>
-        <option value="sunset">Sunset</option>
         <option value="light">Light</option>
-        <option value="aurora">Aurora</option>
-        <option value="ember">Ember</option>
-        <option value="slate">Slate</option>
-        <option value="noir">Noir</option>
-        <option value="cobalt">Cobalt</option>
-        <option value="rose">Rose</option>
-        <option value="ice">Ice</option>
-        <option value="neon">Neon</option>
-        <option value="vintage">Vintage</option>
-        <option value="cinema">Cinema</option>
       </select>
     </nav>
   </header>
 
-  <!-- Main Content -->
   <main class="main">
     <h1 class="page-title">Settings</h1>
-    <p class="page-subtitle">Configure integrations and manage your watched movies</p>
+    <p class="page-subtitle">Configure your media servers and integrations</p>
 
-    <!-- Integration Settings -->
+    <!-- Media Servers -->
     <div class="card">
-      <div class="card-title">
-        <span>Integrations</span>
-        <button class="btn btn-primary" id="save-settings">Save All Settings</button>
-      </div>
-
-      <div id="integration-list">
-        <!-- Integrations will be loaded here -->
-      </div>
-
-      <div id="settings-feedback"></div>
-    </div>
-
-    <!-- Server Configurations (Plex/Radarr) -->
-    <div class="card">
-      <div class="card-title">
-        <span>Plex Servers</span>
-        <button class="btn btn-primary btn-sm" onclick="openServerModal('plex')">+ Add Plex Server</button>
-      </div>
-      <div id="plex-servers-list">
-        <p style="color: var(--text-dim); text-align: center; padding: 20px;">Loading...</p>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">
-        <span>Radarr Servers</span>
-        <button class="btn btn-primary btn-sm" onclick="openServerModal('radarr')">+ Add Radarr Server</button>
-      </div>
-      <div id="radarr-servers-list">
-        <p style="color: var(--text-dim); text-align: center; padding: 20px;">Loading...</p>
-      </div>
-    </div>
-
-    <!-- Server Modal -->
-    <div id="server-modal" class="modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); z-index:1000; align-items:center; justify-content:center;">
-      <div class="card" style="width:100%; max-width:500px; margin:auto;">
-        <div class="card-title">
-          <span id="server-modal-title">Add Server</span>
-          <button class="btn btn-secondary btn-sm" onclick="closeServerModal()">&times;</button>
+      <div class="card-header">
+        <span class="card-title">Media Servers</span>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-secondary btn-sm" onclick="openModal('plex')">+ Plex</button>
+          <button class="btn btn-secondary btn-sm" onclick="openModal('radarr')">+ Radarr</button>
         </div>
-        <form id="server-form">
-          <input type="hidden" id="server-edit-id">
-          <input type="hidden" id="server-type">
-          <div style="display:flex; flex-direction:column; gap:12px;">
-            <div>
-              <label class="form-label">Name</label>
-              <input type="text" class="form-input" id="server-name" placeholder="e.g., Home Plex" required>
-            </div>
-            <div>
-              <label class="form-label">Base URL</label>
-              <input type="text" class="form-input" id="server-url" placeholder="http://localhost:32400" required>
-            </div>
-            <div>
-              <label class="form-label" id="server-key-label">Token/API Key</label>
-              <input type="password" class="form-input" id="server-key" placeholder="Token or API Key">
-            </div>
-            <div style="display:flex; align-items:center; gap:8px;">
-              <input type="checkbox" id="server-default">
-              <label for="server-default" style="font-size:13px;">Set as default</label>
-            </div>
-            <div style="display:flex; gap:8px; margin-top:8px;">
-              <button type="submit" class="btn btn-primary" style="flex:1;">Save</button>
-              <button type="button" class="btn btn-secondary" onclick="closeServerModal()">Cancel</button>
-            </div>
-          </div>
-        </form>
-        <div id="server-form-feedback" style="margin-top:12px;"></div>
+      </div>
+      <div class="server-grid" id="servers-list">
+        <div class="empty-state">
+          <p>No servers configured</p>
+          <button class="btn btn-primary btn-sm" onclick="openModal('plex')">Add Plex Server</button>
+        </div>
       </div>
     </div>
 
+    <!-- AI Providers -->
+    <div class="card ai-section">
+      <div class="card-header">
+        <span class="card-title">AI Providers</span>
+        <button class="btn btn-primary btn-sm" id="save-ai">Save</button>
+      </div>
+
+      <div class="ai-provider">
+        <div class="ai-provider-header">
+          <span class="ai-provider-name">Groq Cloud</span>
+          <span class="integration-status" id="groq-status">Not configured</span>
+        </div>
+        <div class="ai-provider-fields">
+          <input type="password" id="groq_api_key" placeholder="API Key from console.groq.com">
+          <select id="groq_model">
+            <option value="llama-3.3-70b-versatile">Llama 3.3 70B</option>
+            <option value="llama-3.1-8b-instant">Llama 3.1 8B (Fast)</option>
+            <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
+          </select>
+        </div>
+        <div class="model-chips" id="groq-chips"></div>
+      </div>
+
+      <div class="ai-provider">
+        <div class="ai-provider-header">
+          <span class="ai-provider-name">Ollama (Local)</span>
+          <span class="integration-status" id="ollama-status">Not configured</span>
+        </div>
+        <div class="ai-provider-fields">
+          <input type="text" id="ollama_base_url" placeholder="http://localhost:11434">
+          <select id="ollama_model">
+            <option value="">Select model...</option>
+          </select>
+          <button class="btn btn-secondary btn-sm btn-icon" onclick="refreshOllamaModels()" title="Refresh">↻</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Data Sources -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Data Sources</span>
+        <button class="btn btn-primary btn-sm" id="save-integrations">Save All</button>
+      </div>
+      <div class="integration-list" id="integration-list"></div>
+      <div id="integration-feedback"></div>
+    </div>
+
+    <!-- Seen Movies -->
     <div class="two-col">
-      <!-- Seen Movies -->
       <div class="card">
-        <div class="card-title">
-          <span>Seen Movies</span>
-          <button class="btn btn-secondary btn-sm" id="refresh-seen">Refresh</button>
+        <div class="card-header">
+          <span class="card-title">Seen Movies</span>
+          <button class="btn btn-secondary btn-sm" id="import-plex">Import from Plex</button>
         </div>
-
         <div class="seen-controls">
-          <input type="text" class="form-input" id="seen-search" placeholder="Search seen movies..." style="flex:1;">
-          <button class="btn btn-secondary" id="import-plex">Import from Plex</button>
+          <input type="text" class="form-input" id="seen-search" placeholder="Search...">
         </div>
-
-        <div id="seen-feedback"></div>
         <div class="seen-list" id="seen-list">
-          <p style="color: var(--text-dim); text-align: center; padding: 20px;">Loading...</p>
+          <div class="empty-state"><p>No movies tracked yet</p></div>
         </div>
       </div>
 
-      <!-- Add Movie Manually -->
       <div class="card">
-        <div class="card-title">Add Movie Manually</div>
-
-        <form id="manual-form">
-          <div style="display: flex; gap: 12px; margin-bottom: 16px;">
-            <input type="text" class="form-input" id="manual-title" placeholder="Movie title" required style="flex: 2;">
-            <input type="number" class="form-input" id="manual-year" placeholder="Year" min="1888" max="2100" style="flex: 1;">
-          </div>
-          <button type="submit" class="btn btn-primary">Add to Seen List</button>
-        </form>
-
-        <div style="margin-top: 24px;">
-          <div class="card-title" style="margin-bottom: 12px;">
-            <span>Plex Library</span>
-            <button class="btn btn-secondary btn-sm" id="load-plex">Load Library</button>
-          </div>
-          <div class="plex-library" id="plex-library">
-            <p style="color: var(--text-dim); text-align: center; padding: 20px;">Click "Load Library" to see your Plex movies</p>
-          </div>
-          <button class="btn btn-success" id="add-selected-plex" style="width: 100%; margin-top: 12px;">Add Selected to Seen</button>
+        <div class="card-header">
+          <span class="card-title">Add Movie</span>
         </div>
+        <form id="add-movie-form">
+          <div class="form-group">
+            <input type="text" class="form-input" id="movie-title" placeholder="Movie title" required>
+          </div>
+          <div class="form-group">
+            <input type="number" class="form-input" id="movie-year" placeholder="Year (optional)" min="1888" max="2100">
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%;">Add to Seen</button>
+        </form>
       </div>
     </div>
   </main>
 
+  <!-- Server Modal -->
+  <div class="modal-overlay" id="server-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" id="modal-title">Add Server</span>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <form id="server-form">
+        <input type="hidden" id="server-id">
+        <input type="hidden" id="server-type">
+        <div class="form-group">
+          <label class="form-label">Name</label>
+          <input type="text" class="form-input" id="server-name" placeholder="e.g., Home Plex" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">URL</label>
+          <input type="text" class="form-input" id="server-url" placeholder="http://localhost:32400" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" id="server-key-label">Token</label>
+          <input type="password" class="form-input" id="server-key" placeholder="Enter token or API key">
+        </div>
+        <label class="form-checkbox">
+          <input type="checkbox" id="server-default">
+          <span>Set as default</span>
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script>
+    // Data
     const INTEGRATIONS = [
-      { key: 'google', label: 'Google Sign-In', fields: [
-        { name: 'google_client_id', label: 'Client ID', type: 'text' },
-        { name: 'google_client_secret', label: 'Client Secret', type: 'password' }
-      ]},
       { key: 'tmdb', label: 'TMDB', fields: [{ name: 'tmdb_api_key', label: 'API Key', type: 'password' }] },
-      { key: 'rottentomatoes', label: 'Rotten Tomatoes', fields: [{ name: 'rottentomatoes_list_url', label: 'List URL', type: 'text' }] },
-      { key: 'rogerebert', label: 'RogerEbert', fields: [{ name: 'rogerebert_reviews_url', label: 'Reviews URL', type: 'text' }] },
-      { key: 'releases', label: 'Releases', fields: [{ name: 'releases_url', label: 'URL', type: 'text' }] },
       { key: 'nzbgeek', label: 'NZBGeek', fields: [
-        { name: 'nzbgeek_rss_url', label: 'RSS URL', type: 'text' },
         { name: 'nzbgeek_api_key', label: 'API Key', type: 'password' }
       ]},
       { key: 'drunkenslug', label: 'DrunkenSlug', fields: [
-        { name: 'drunkenslug_base_url', label: 'Base URL', type: 'text' },
         { name: 'drunkenslug_api_key', label: 'API Key', type: 'password' }
       ]},
       { key: 'usenet', label: 'Usenet/NZBHydra', fields: [
         { name: 'usenet_base_url', label: 'Base URL', type: 'text' },
         { name: 'usenet_api_key', label: 'API Key', type: 'password' }
-      ]},
-      { key: 'groq', label: 'Groq Cloud (Free AI)', fields: [
-        { name: 'groq_api_key', label: 'API Key', type: 'password' },
-        { name: 'groq_model', label: 'Model', type: 'text' }
-      ]},
-      { key: 'ollama', label: 'Ollama (Local AI)', fields: [
-        { name: 'ollama_base_url', label: 'Base URL', type: 'text' },
-        { name: 'ollama_model', label: 'Model', type: 'text' }
       ]}
     ];
 
-    let currentSettings = {};
-    let integrationStatus = {};
-    let integrationVerboseResults = {};
+    let settings = {};
+    let servers = [];
 
-    function escapeHtml(value) {
-      return String(value ?? '')
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;');
-    }
-
-    function escapeAttr(value) {
-      return escapeHtml(value).replaceAll('`', '&#96;');
-    }
-
-    function getAuthHeaders(extra = {}) {
-      const headers = { ...extra };
-      const token = localStorage.getItem('majic_auth_token');
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-      return headers;
+    function esc(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 
     function getUserId() {
       let id = localStorage.getItem('majic_user_id');
-      if (!id) {
-        id = 'user-' + Math.random().toString(36).slice(2);
-        localStorage.setItem('majic_user_id', id);
-      }
+      if (!id) { id = 'user-' + Math.random().toString(36).slice(2); localStorage.setItem('majic_user_id', id); }
       return id;
     }
 
-    function collectIntegrationValues() {
-      const values = {};
-      INTEGRATIONS.forEach(int => {
-        int.fields.forEach(field => {
-          const el = document.getElementById(field.name);
-          values[field.name] = el ? String(el.value || '').trim() : '';
-        });
-      });
-      return values;
-    }
-
-    function integrationHasInput(int, values) {
-      return int.fields.some(field => String(values[field.name] || '').trim() !== '');
-    }
-
-    async function requestIntegrationTest(key, values) {
-      const res = await fetch('/api/integrations/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ integration: key, values })
-      });
-      const data = await res.json();
-      return {
-        ok: !!data.ok,
-        message: data.message || '',
-        details: data.details || null,
-        integration: data.integration || key,
-        statusCode: res.status
-      };
-    }
-
-    function maskFieldValue(fieldName, value) {
-      const text = String(value || '');
-      const lowered = fieldName.toLowerCase();
-      const sensitive = lowered.includes('key') || lowered.includes('token') || lowered.includes('password');
-      if (!sensitive) return text || '(empty)';
-      if (!text) return '(empty)';
-      if (text.length <= 6) return '*'.repeat(text.length);
-      return `${text.slice(0, 3)}***${text.slice(-2)}`;
-    }
-
-    function renderVerboseOutput(key, result) {
-      const row = document.querySelector(`.integration-row[data-integration-key="${key}"]`);
-      if (!row || !result) return;
-
-      let block = row.querySelector('.integration-verbose');
-      if (!block) {
-        block = document.createElement('pre');
-        block.className = 'integration-verbose';
-        row.appendChild(block);
-      }
-
-      const testedAt = result.testedAt || new Date().toISOString();
-      const payload = result.values || {};
-      const integration = INTEGRATIONS.find(item => item.key === key);
-      const fieldLines = (integration?.fields || [])
-        .map(field => `  - ${field.name}: ${maskFieldValue(field.name, payload[field.name])}`)
-        .join('\n');
-
-      const detailsText = result.details
-        ? `\nDetails:\n${JSON.stringify(result.details, null, 2)}`
-        : '';
-
-      block.textContent =
-`Test: ${result.integration || key}
-Time: ${testedAt}
-HTTP: ${result.statusCode || 'n/a'}
-Result: ${result.ok ? 'PASS' : 'FAIL'}
-Message: ${result.message || '(none)'}
-Input:
-${fieldLines || '  (no fields)'}${detailsText}`;
-    }
-
-    async function computeIntegrationStatus(values) {
-      const entries = await Promise.all(
-        INTEGRATIONS.map(async int => {
-          if (!integrationHasInput(int, values)) return [int.key, null];
-          try {
-            const tested = await requestIntegrationTest(int.key, values);
-            return [int.key, tested.ok];
-          } catch {
-            return [int.key, false];
-          }
-        })
-      );
-      return Object.fromEntries(entries);
-    }
-
-    async function loadSettings() {
-      try {
-        const settingsRes = await fetch('/api/settings');
-        const settingsData = await settingsRes.json();
-        currentSettings = settingsData.values || {};
-        integrationStatus = await computeIntegrationStatus(currentSettings);
-        renderIntegrations();
-      } catch (e) {
-        console.error('Failed to load settings:', e);
-      }
-    }
-
-    function renderIntegrations() {
-      const container = document.getElementById('integration-list');
-      container.innerHTML = INTEGRATIONS.map(int => {
-        const status = integrationStatus[int.key];
-        const hasInput = integrationHasInput(int, currentSettings);
-        const statusClass = status === true ? 'success' : status === false ? 'error' : 'pending';
-        const statusText = status === true
-          ? 'Connected'
-          : status === false
-            ? 'Test failed'
-            : hasInput
-              ? 'Needs test'
-              : 'Not configured';
-        const label = escapeHtml(int.label);
-
-        // Special handling for Groq with model selector
-        if (int.key === 'groq') {
-          const groqApiKey = escapeAttr(currentSettings['groq_api_key'] || '');
-          const groqModel = String(currentSettings['groq_model'] || 'llama-3.3-70b-versatile');
-          const groqModelEscaped = escapeHtml(groqModel);
-
-          return `
-            <div class="integration-row groq-row" data-integration-key="${int.key}">
-              <div>
-                <div class="integration-name">${label}</div>
-                <span class="status-badge ${statusClass}">${statusText}</span>
-              </div>
-              <div class="integration-fields">
-                <div class="integration-field">
-                  <input type="password" class="form-input"
-                         id="groq_api_key"
-                         placeholder="API Key (from console.groq.com)"
-                         value="${groqApiKey}">
-                </div>
-                <div class="integration-field ollama-model-field">
-                  <select id="groq_model" class="form-input ollama-model-select">
-                    <option value="${escapeAttr(groqModel)}">${groqModelEscaped}</option>
-                  </select>
-                </div>
-              </div>
-              <div class="integration-actions">
-                <button class="btn btn-secondary btn-sm" onclick="testIntegration('groq')">Test</button>
-              </div>
-            </div>
-            <div class="ollama-extras" style="border-top: 1px dashed var(--border); margin-top: 8px;">
-              <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
-                <span style="font-size: 12px; color: var(--text-dim); width: 100%;">Free tier: 14,400 requests/day | Get API key at <a href="https://console.groq.com" target="_blank" style="color: var(--blue);">console.groq.com</a></span>
-              </div>
-              <div class="models-header">Available Models:</div>
-              <div id="groq-models-list" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;"></div>
-            </div>
-          `;
-        }
-
-        // Special handling for Ollama with model selector
-        if (int.key === 'ollama') {
-          const ollamaBaseUrl = escapeAttr(currentSettings['ollama_base_url'] || 'http://localhost:11434');
-          const ollamaModel = String(currentSettings['ollama_model'] || '');
-          const ollamaModelEscaped = escapeHtml(ollamaModel || 'Loading...');
-          const ollamaModelAttr = escapeAttr(ollamaModel);
-
-          return `
-            <div class="integration-row ollama-row" data-integration-key="${int.key}">
-              <div>
-                <div class="integration-name">${label}</div>
-                <span class="status-badge ${statusClass}">${statusText}</span>
-              </div>
-              <div class="integration-fields">
-                <div class="integration-field">
-                  <input type="text" class="form-input"
-                         id="ollama_base_url"
-                         placeholder="Base URL"
-                         value="${ollamaBaseUrl}">
-                </div>
-                <div class="integration-field ollama-model-field">
-                  <select id="ollama_model" class="form-input ollama-model-select">
-                    <option value="${ollamaModelAttr}">${ollamaModelEscaped}</option>
-                  </select>
-                  <button class="btn btn-secondary btn-sm" onclick="refreshOllamaModels()" title="Refresh models">↻</button>
-                </div>
-              </div>
-              <div class="integration-actions">
-                <button class="btn btn-secondary btn-sm" onclick="testIntegration('ollama')">Test</button>
-              </div>
-            </div>
-            <div class="ollama-extras">
-              <div class="ollama-models-list" id="ollama-models-list"></div>
-              <div class="ollama-pull-section">
-                <input type="text" id="ollama-pull-input" class="form-input" placeholder="Model name (e.g. llama3.2, mistral, phi3)">
-                <button class="btn btn-primary btn-sm" onclick="pullOllamaModel()">Pull Model</button>
-              </div>
-              <div id="ollama-pull-status" class="ollama-pull-status"></div>
-              <div class="ollama-suggestions">
-                <span class="suggestion-label">Popular:</span>
-                <button class="btn btn-ghost btn-xs" onclick="pullOllamaModel('llama3.2')">llama3.2</button>
-                <button class="btn btn-ghost btn-xs" onclick="pullOllamaModel('mistral')">mistral</button>
-                <button class="btn btn-ghost btn-xs" onclick="pullOllamaModel('phi3')">phi3</button>
-                <button class="btn btn-ghost btn-xs" onclick="pullOllamaModel('gemma2')">gemma2</button>
-                <button class="btn btn-ghost btn-xs" onclick="pullOllamaModel('qwen2.5')">qwen2.5</button>
-              </div>
-            </div>
-          `;
-        }
-
-        return `
-          <div class="integration-row" data-integration-key="${int.key}">
-            <div>
-              <div class="integration-name">${label}</div>
-              <span class="status-badge ${statusClass}">${statusText}</span>
-            </div>
-            <div class="integration-fields">
-              ${int.fields.map(field => `
-                <div class="integration-field">
-                  <input type="${field.type}" class="form-input"
-                         id="${field.name}"
-                         placeholder="${escapeAttr(field.label)}"
-                         value="${escapeAttr(currentSettings[field.name] || '')}">
-                </div>
-              `).join('')}
-            </div>
-            <div class="integration-actions">
-              <button class="btn btn-secondary btn-sm" onclick="testIntegration('${int.key}')">Test</button>
-            </div>
-          </div>
-        `;
-      }).join('');
-
-      // Load models after rendering
-      renderGroqModels();
-      refreshOllamaModels();
-
-      Object.entries(integrationVerboseResults).forEach(([key, result]) => {
-        renderVerboseOutput(key, result);
-      });
-    }
-
-    // Groq available models
-    const GROQ_MODELS = [
-      { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B', desc: 'Best quality, 128k context', badge: 'Recommended' },
-      { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B', desc: 'Fastest, instant responses', badge: 'Fast' },
-      { id: 'llama-3.2-11b-vision-preview', name: 'Llama 3.2 Vision', desc: 'Can analyze images', badge: 'Vision' },
-      { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B', desc: 'Strong reasoning, 32k context', badge: '' },
-      { id: 'gemma2-9b-it', name: 'Gemma 2 9B', desc: 'Google model, efficient', badge: '' },
-    ];
-
-    function renderGroqModels() {
-      const select = document.getElementById('groq_model');
-      const listEl = document.getElementById('groq-models-list');
-      if (!select) return;
-
-      const currentModel = String(currentSettings['groq_model'] || 'llama-3.3-70b-versatile');
-
-      // Populate select
-      select.innerHTML = '';
-      for (const model of GROQ_MODELS) {
-        const option = document.createElement('option');
-        option.value = model.id;
-        option.textContent = `${model.name}${model.badge ? ` (${model.badge})` : ''}`;
-        option.selected = model.id === currentModel;
-        select.appendChild(option);
-      }
-
-      // Update setting when changed
-      select.onchange = () => {
-        currentSettings['groq_model'] = select.value;
-      };
-
-      // Render model cards
-      if (listEl) {
-        listEl.innerHTML = GROQ_MODELS.map(model => {
-          const isActive = model.id === currentModel;
-          return `
-            <div class="model-item${isActive ? ' active-model' : ''}" style="cursor: pointer; padding: 8px 12px; border-radius: 6px; background: var(--bg); flex: 1; min-width: 180px;" onclick="selectGroqModel('${model.id}')">
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span class="model-name" style="font-weight: 500;">${escapeHtml(model.name)}</span>
-                ${model.badge ? `<span style="font-size: 10px; padding: 2px 6px; background: var(--surface-2); border-radius: 4px; color: var(--${model.badge === 'Recommended' ? 'green' : model.badge === 'Fast' ? 'yellow' : 'blue'});">${model.badge}</span>` : ''}
-              </div>
-              <div style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">${escapeHtml(model.desc)}</div>
-            </div>
-          `;
-        }).join('');
-      }
-    }
-
-    function selectGroqModel(modelId) {
-      currentSettings['groq_model'] = modelId;
-      const select = document.getElementById('groq_model');
-      if (select) select.value = modelId;
-      renderGroqModels();
-    }
-
-    async function refreshOllamaModels() {
-      const select = document.getElementById('ollama_model');
-      const listEl = document.getElementById('ollama-models-list');
-      if (!select) return;
-
-      try {
-        const res = await fetch('/api/ollama/models');
-        const data = await res.json();
-
-        if (data.ok && data.models.length > 0) {
-          const currentModel = String(data.current_model || currentSettings['ollama_model'] || '');
-          const normalizeModel = (value) => String(value || '').trim().toLowerCase();
-          const currentModelNorm = normalizeModel(currentModel);
-          const isCurrentModel = (name) => {
-            const normalized = normalizeModel(name);
-            if (!normalized || !currentModelNorm) return false;
-            if (normalized === currentModelNorm) return true;
-            if (!currentModelNorm.includes(':')) return normalized.split(':')[0] === currentModelNorm;
-            return false;
-          };
-          select.innerHTML = '';
-
-          for (const model of data.models) {
-            const name = String(model.name || model.model || '').trim();
-            if (!name) continue;
-            const sizeBytes = Number(model.size || 0);
-            const size = Number.isFinite(sizeBytes) && sizeBytes > 0
-              ? `${(sizeBytes / 1e9).toFixed(1)}GB`
-              : 'n/a';
-
-            const option = document.createElement('option');
-            option.value = name;
-            option.textContent = `${name} (${size})`;
-            option.selected = isCurrentModel(name);
-            select.appendChild(option);
-          }
-
-          if (!select.options.length) {
-            const option = document.createElement('option');
-            option.value = '';
-            option.textContent = 'No models found';
-            select.appendChild(option);
-          }
-
-          if (listEl) {
-            listEl.innerHTML = '';
-            const header = document.createElement('div');
-            header.className = 'models-header';
-            header.textContent = 'Installed Models:';
-            listEl.appendChild(header);
-
-            for (const model of data.models) {
-              const name = String(model.name || model.model || '').trim();
-              if (!name) continue;
-              const sizeBytes = Number(model.size || 0);
-              const size = Number.isFinite(sizeBytes) && sizeBytes > 0
-                ? `${(sizeBytes / 1e9).toFixed(1)}GB`
-                : 'n/a';
-              const params = String(model.details?.parameter_size || '');
-              const active = isCurrentModel(name);
-
-              const row = document.createElement('div');
-              row.className = 'model-item';
-              if (active) row.classList.add('active-model');
-
-              const nameEl = document.createElement('span');
-              nameEl.className = 'model-name';
-              nameEl.textContent = name;
-
-              const infoEl = document.createElement('span');
-              infoEl.className = 'model-info';
-              infoEl.textContent = params ? `${params} · ${size}` : size;
-
-              const button = document.createElement('button');
-              button.className = 'btn btn-ghost btn-xs';
-              button.type = 'button';
-              button.textContent = active ? 'Using' : 'Use';
-              button.disabled = active;
-              button.addEventListener('click', () => selectOllamaModel(name));
-
-              row.appendChild(nameEl);
-              row.appendChild(infoEl);
-              row.appendChild(button);
-              listEl.appendChild(row);
-            }
-          }
-        } else {
-          select.innerHTML = '';
-          const option = document.createElement('option');
-          option.value = '';
-          option.textContent = 'No models found';
-          select.appendChild(option);
-          if (listEl) {
-            listEl.innerHTML = '';
-            const msg = document.createElement('div');
-            msg.className = 'no-models';
-            msg.textContent = 'No models installed. Pull one below.';
-            listEl.appendChild(msg);
-          }
-        }
-      } catch (e) {
-        select.innerHTML = '';
-        const option = document.createElement('option');
-        option.value = '';
-        option.textContent = 'Error loading models';
-        select.appendChild(option);
-        if (listEl) {
-          listEl.innerHTML = '';
-          const msg = document.createElement('div');
-          msg.className = 'no-models';
-          msg.textContent = 'Could not connect to Ollama';
-          listEl.appendChild(msg);
-        }
-      }
-    }
-
-    function setOllamaStatus(level, message) {
-      const statusEl = document.getElementById('ollama-pull-status');
-      if (!statusEl) return;
-      statusEl.innerHTML = '';
-      const span = document.createElement('span');
-      span.className = level;
-      span.textContent = message;
-      statusEl.appendChild(span);
-    }
-
-    async function selectOllamaModel(modelName) {
-      const model = String(modelName || '').trim();
-      if (!model) return;
-
-      setOllamaStatus('loading', `Switching to ${model}...`);
-
-      try {
-        const res = await fetch('/api/ollama/model', {
-          method: 'POST',
-          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ model })
-        });
-        const data = await res.json();
-        if (!data.ok) {
-          setOllamaStatus('error', data.message || `Failed to use ${model}`);
-          return;
-        }
-
-        currentSettings['ollama_model'] = data.model || model;
-        const select = document.getElementById('ollama_model');
-        if (select) select.value = currentSettings['ollama_model'];
-        setOllamaStatus('success', data.message || `Active model: ${currentSettings['ollama_model']}`);
-        await refreshOllamaModels();
-      } catch (e) {
-        setOllamaStatus('error', `Failed to use model: ${e.message}`);
-      }
-    }
-
-    async function pullOllamaModel(modelName) {
-      const input = document.getElementById('ollama-pull-input');
-      const model = modelName || (input ? input.value.trim() : '');
-
-      if (!model) {
-        setOllamaStatus('error', 'Enter a model name');
-        return;
-      }
-
-      setOllamaStatus('loading', `Pulling ${model}... (this may take a while)`);
-
-      try {
-        const res = await fetch('/api/ollama/pull', {
-          method: 'POST',
-          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ model })
-        });
-        const data = await res.json();
-
-        if (res.status === 401 || res.status === 403) {
-          setOllamaStatus('error', 'Login required to pull models');
-          return;
-        }
-
-        if (data.ok) {
-          setOllamaStatus('success', data.message || `Pulled ${model}`);
-          if (input) input.value = '';
-          if (data.model) {
-            currentSettings['ollama_model'] = data.model;
-            const sel = document.getElementById('ollama_model');
-            if (sel) sel.value = data.model;
-          }
-          refreshOllamaModels();
-        } else {
-          setOllamaStatus('error', data.message || 'Pull failed');
-        }
-      } catch (e) {
-        setOllamaStatus('error', `Pull failed: ${e.message}`);
-      }
-    }
-
-    async function testIntegration(key) {
-      const values = collectIntegrationValues();
-
-      try {
-        const data = await requestIntegrationTest(key, values);
-        currentSettings = values;
-        integrationStatus[key] = data.ok;
-        integrationVerboseResults[key] = {
-          ...data,
-          values,
-          testedAt: new Date().toISOString()
-        };
-        renderIntegrations();
-        renderVerboseOutput(key, integrationVerboseResults[key]);
-        showFeedback('settings-feedback', data.ok ? data.message : `Error: ${data.message}`, data.ok);
-      } catch (e) {
-        showFeedback('settings-feedback', 'Test failed: ' + e.message, false);
-      }
-    }
-
-    async function saveSettings() {
-      const values = collectIntegrationValues();
-      currentSettings = values;
-      renderIntegrations();
-
-      try {
-        showFeedback('settings-feedback', 'Saving settings...', true);
-
-        // Save all user-entered values (don't clear on failed tests)
-        const savePayload = {};
-        INTEGRATIONS.forEach(int => {
-          int.fields.forEach(field => {
-            savePayload[field.name] = String(values[field.name] || '').trim();
-          });
-        });
-
-        const res = await fetch('/api/settings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(savePayload)
-        });
-        const data = await res.json();
-
-        if (data.status === 'ok') {
-          currentSettings = data.values;
-          renderIntegrations();
-
-          // Test integrations after saving to update status
-          showFeedback('settings-feedback', 'Settings saved. Testing connections...', true);
-          const testResults = await computeIntegrationStatus(data.values);
-          integrationStatus = testResults;
-          renderIntegrations();
-
-          const tested = Object.values(testResults).filter(v => v !== null).length;
-          const passed = Object.values(testResults).filter(v => v === true).length;
-          const failed = tested - passed;
-          showFeedback(
-            'settings-feedback',
-            `Saved! ${passed}/${tested} integrations connected${failed > 0 ? ` (${failed} failed - check credentials)` : ''}.`,
-            passed > 0 || tested === 0
-          );
-        } else {
-          showFeedback('settings-feedback', 'Failed to save settings', false);
-        }
-      } catch (e) {
-        showFeedback('settings-feedback', 'Save failed: ' + e.message, false);
-      }
-    }
-
-    function showFeedback(elementId, message, success) {
-      const el = document.getElementById(elementId);
-      el.className = `feedback ${success ? 'success' : 'error'}`;
-      el.textContent = message;
-      setTimeout(() => { el.textContent = ''; el.className = ''; }, 5000);
-    }
-
-    // Seen Movies
-    async function loadSeenMovies() {
-      const search = document.getElementById('seen-search').value;
-      try {
-        const res = await fetch(`/api/seen/${getUserId()}?limit=500${search ? '&q=' + encodeURIComponent(search) : ''}`);
-        const data = await res.json();
-
-        const container = document.getElementById('seen-list');
-        if (!data.length) {
-          container.innerHTML = '<p style="color: var(--text-dim); text-align: center; padding: 20px;">No seen movies yet</p>';
-          return;
-        }
-
-        container.innerHTML = data.slice(0, 100).map(movie => `
-          <div class="seen-item">
-            <div class="seen-item-info">
-              <span class="seen-item-title">${movie.title}</span>
-              <span class="seen-item-meta">${movie.year || ''} • ${movie.source || 'manual'}</span>
-            </div>
-            <button class="btn btn-secondary btn-sm" onclick="removeSeen('${movie.movie_id}')">Remove</button>
-          </div>
-        `).join('');
-      } catch (e) {
-        console.error('Failed to load seen movies:', e);
-      }
-    }
-
-    async function removeSeen(movieId) {
-      try {
-        await fetch('/api/seen', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: getUserId(), movie_id: movieId })
-        });
-        loadSeenMovies();
-      } catch (e) {
-        console.error('Failed to remove:', e);
-      }
-    }
-
-    async function importFromPlex() {
-      const btn = document.getElementById('import-plex');
-      btn.disabled = true;
-      btn.textContent = 'Importing...';
-
-      try {
-        const res = await fetch(`/api/seen/import/plex?user_id=${getUserId()}`, { method: 'POST' });
-        const data = await res.json();
-
-        if (data.ok) {
-          showFeedback('seen-feedback', `Imported ${data.imported} movies from Plex`, true);
-          loadSeenMovies();
-        } else {
-          showFeedback('seen-feedback', data.message || 'Import failed', false);
-        }
-      } catch (e) {
-        showFeedback('seen-feedback', 'Import failed: ' + e.message, false);
-      }
-
-      btn.disabled = false;
-      btn.textContent = 'Import from Plex';
-    }
-
-    // Manual Add
-    document.getElementById('manual-form').onsubmit = async (e) => {
-      e.preventDefault();
-      const title = document.getElementById('manual-title').value.trim();
-      const year = document.getElementById('manual-year').value;
-
-      if (!title) return;
-
-      try {
-        await fetch('/api/seen', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user_id: getUserId(),
-            movie_id: `manual:${title.toLowerCase().replace(/\s+/g, '_')}:${year || 'na'}`,
-            title,
-            year: year ? parseInt(year) : null,
-            source: 'manual'
-          })
-        });
-
-        document.getElementById('manual-title').value = '';
-        document.getElementById('manual-year').value = '';
-        loadSeenMovies();
-      } catch (e) {
-        console.error('Failed to add:', e);
-      }
+    // Theme
+    const theme = localStorage.getItem('majic_theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', theme);
+    document.getElementById('theme-select').value = theme;
+    document.getElementById('theme-select').onchange = e => {
+      document.documentElement.setAttribute('data-theme', e.target.value);
+      localStorage.setItem('majic_theme', e.target.value);
     };
 
-    // Plex Library
-    let plexMovies = [];
-    let selectedPlex = new Set();
-
-    async function loadPlexLibrary() {
-      const btn = document.getElementById('load-plex');
-      btn.disabled = true;
-      btn.textContent = 'Loading...';
-
-      try {
-        const res = await fetch('/api/plex/library?limit=500');
-        const data = await res.json();
-
-        if (!data.ok) {
-          document.getElementById('plex-library').innerHTML = `<p style="color: var(--accent); padding: 20px;">${data.message || 'Failed to load'}</p>`;
-          btn.disabled = false;
-          btn.textContent = 'Load Library';
-          return;
-        }
-
-        plexMovies = data.movies || [];
-        selectedPlex.clear();
-        renderPlexLibrary();
-      } catch (e) {
-        console.error('Failed to load Plex:', e);
-      }
-
-      btn.disabled = false;
-      btn.textContent = 'Load Library';
-    }
-
-    function renderPlexLibrary() {
-      const container = document.getElementById('plex-library');
-      if (!plexMovies.length) {
-        container.innerHTML = '<p style="color: var(--text-dim); padding: 20px;">No movies found</p>';
-        return;
-      }
-
-      container.innerHTML = plexMovies.slice(0, 100).map(movie => `
-        <div class="plex-item ${selectedPlex.has(movie.movie_id) ? 'selected' : ''}" onclick="togglePlexSelect('${movie.movie_id}')">
-          <input type="checkbox" ${selectedPlex.has(movie.movie_id) ? 'checked' : ''}>
-          <span>${movie.title} ${movie.year ? `(${movie.year})` : ''}</span>
-        </div>
-      `).join('');
-    }
-
-    function togglePlexSelect(movieId) {
-      if (selectedPlex.has(movieId)) selectedPlex.delete(movieId);
-      else selectedPlex.add(movieId);
-      renderPlexLibrary();
-    }
-
-    async function addSelectedPlex() {
-      if (!selectedPlex.size) return;
-
-      const btn = document.getElementById('add-selected-plex');
-      btn.disabled = true;
-      btn.textContent = 'Adding...';
-
-      for (const movieId of selectedPlex) {
-        const movie = plexMovies.find(m => m.movie_id === movieId);
-        if (!movie) continue;
-
-        try {
-          await fetch('/api/seen', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              user_id: getUserId(),
-              movie_id: movie.movie_id,
-              title: movie.title,
-              year: movie.year,
-              source: 'plex'
-            })
-          });
-        } catch (e) { /* ignore */ }
-      }
-
-      selectedPlex.clear();
-      renderPlexLibrary();
-      loadSeenMovies();
-
-      btn.disabled = false;
-      btn.textContent = 'Add Selected to Seen';
-    }
-
-    // Event Listeners
-    document.getElementById('save-settings').onclick = saveSettings;
-    document.getElementById('refresh-seen').onclick = loadSeenMovies;
-    document.getElementById('import-plex').onclick = importFromPlex;
-    document.getElementById('load-plex').onclick = loadPlexLibrary;
-    document.getElementById('add-selected-plex').onclick = addSelectedPlex;
-    document.getElementById('seen-search').oninput = () => {
-      clearTimeout(window.seenSearchTimer);
-      window.seenSearchTimer = setTimeout(loadSeenMovies, 300);
-    };
-
-    // Initialize
-    (function() {
-      const saved = localStorage.getItem('majic_theme') || 'dark';
-      document.documentElement.setAttribute('data-theme', saved);
-      const sel = document.getElementById('int-theme-select');
-      if (sel) sel.value = saved;
-      if (sel) sel.addEventListener('change', () => {
-        document.documentElement.setAttribute('data-theme', sel.value);
-        localStorage.setItem('majic_theme', sel.value);
-      });
-    })();
-    loadSettings();
-    loadSeenMovies();
-    loadServers();
-
-    // ===== Server Management =====
-    let serversList = { plex: [], radarr: [] };
-
+    // Servers
     async function loadServers() {
       try {
         const res = await fetch('/api/servers');
         const data = await res.json();
-        if (data.ok) {
-          serversList.plex = data.servers.filter(s => s.service_type === 'plex');
-          serversList.radarr = data.servers.filter(s => s.service_type === 'radarr');
-          renderServers('plex');
-          renderServers('radarr');
-        }
-      } catch (e) {
-        console.error('Failed to load servers:', e);
-      }
+        servers = data.ok ? data.servers : [];
+        renderServers();
+      } catch (e) { console.error(e); }
     }
 
-    function renderServers(type) {
-      const list = serversList[type];
-      const container = document.getElementById(`${type}-servers-list`);
-      if (!container) return;
-
-      if (!list.length) {
-        container.innerHTML = `<p style="color: var(--text-dim); text-align: center; padding: 20px;">No ${type === 'plex' ? 'Plex' : 'Radarr'} servers configured</p>`;
+    function renderServers() {
+      const el = document.getElementById('servers-list');
+      if (!servers.length) {
+        el.innerHTML = '<div class="empty-state"><p>No servers configured</p></div>';
         return;
       }
-
-      container.innerHTML = list.map(server => {
-        const isDefault = server.is_default;
-        const keyMasked = server.api_key_masked || '(none)';
-        return `
-          <div class="integration-row" data-server-id="${server.id}">
-            <div>
-              <div class="integration-name">${escapeHtml(server.name)}${isDefault ? ' <span style="color: var(--yellow);">★</span>' : ''}</div>
-              <span class="status-badge pending">${escapeHtml(server.base_url)}</span>
+      el.innerHTML = servers.map(s => `
+        <div class="server-card ${s.is_default ? 'is-default' : ''}" data-id="${s.id}">
+          <div class="server-icon">${s.service_type === 'plex' ? '📺' : '📥'}</div>
+          <div class="server-info">
+            <div class="server-name">
+              ${esc(s.name)}
+              ${s.is_default ? '<span class="default-star">★ Default</span>' : ''}
             </div>
-            <div class="integration-fields" style="font-size:12px; color:var(--text-dim);">
-              Key: ${escapeHtml(keyMasked)}
-            </div>
-            <div class="integration-actions">
-              <button class="btn btn-secondary btn-sm" onclick="testServer(${server.id})">Test</button>
-              ${!isDefault ? `<button class="btn btn-secondary btn-sm" onclick="setDefaultServer(${server.id})">Set Default</button>` : ''}
-              <button class="btn btn-secondary btn-sm" onclick="editServer(${server.id})">Edit</button>
-              <button class="btn btn-secondary btn-sm" onclick="deleteServer(${server.id})" style="color: var(--accent);">Delete</button>
-            </div>
+            <div class="server-url">${esc(s.base_url)}</div>
           </div>
-        `;
-      }).join('');
+          <span class="server-status" data-server-status="${s.id}">Ready</span>
+          <div class="server-actions">
+            <button class="btn btn-secondary btn-sm" onclick="testServer(${s.id})">Test</button>
+            <button class="btn btn-secondary btn-sm" onclick="editServer(${s.id})">Edit</button>
+            <button class="btn btn-secondary btn-sm" onclick="deleteServer(${s.id})">×</button>
+          </div>
+        </div>
+      `).join('');
     }
 
-    function openServerModal(type, serverId = null) {
+    function openModal(type, id = null) {
       const modal = document.getElementById('server-modal');
-      const title = document.getElementById('server-modal-title');
-      const form = document.getElementById('server-form');
-      const feedback = document.getElementById('server-form-feedback');
-
       document.getElementById('server-type').value = type;
-      document.getElementById('server-edit-id').value = serverId || '';
+      document.getElementById('server-id').value = id || '';
+      document.getElementById('modal-title').textContent = id ? `Edit ${type === 'plex' ? 'Plex' : 'Radarr'}` : `Add ${type === 'plex' ? 'Plex' : 'Radarr'}`;
       document.getElementById('server-key-label').textContent = type === 'plex' ? 'Token' : 'API Key';
 
-      if (serverId) {
-        const servers = type === 'plex' ? serversList.plex : serversList.radarr;
-        const server = servers.find(s => s.id === serverId);
-        if (server) {
-          title.textContent = `Edit ${type === 'plex' ? 'Plex' : 'Radarr'} Server`;
-          document.getElementById('server-name').value = server.name;
-          document.getElementById('server-url').value = server.base_url;
+      if (id) {
+        const s = servers.find(x => x.id === id);
+        if (s) {
+          document.getElementById('server-name').value = s.name;
+          document.getElementById('server-url').value = s.base_url;
           document.getElementById('server-key').value = '';
-          document.getElementById('server-key').placeholder = server.api_key_masked || 'Enter new token';
-          document.getElementById('server-default').checked = server.is_default;
+          document.getElementById('server-key').placeholder = 'Leave blank to keep current';
+          document.getElementById('server-default').checked = s.is_default;
         }
       } else {
-        title.textContent = `Add ${type === 'plex' ? 'Plex' : 'Radarr'} Server`;
-        form.reset();
-        document.getElementById('server-default').checked = false;
+        document.getElementById('server-form').reset();
+        document.getElementById('server-url').value = type === 'plex' ? 'http://localhost:32400' : 'http://localhost:7878';
       }
-
-      feedback.innerHTML = '';
-      modal.style.display = 'flex';
+      modal.classList.add('open');
     }
 
-    function closeServerModal() {
-      document.getElementById('server-modal').style.display = 'none';
+    function closeModal() { document.getElementById('server-modal').classList.remove('open'); }
+
+    function editServer(id) {
+      const s = servers.find(x => x.id === id);
+      if (s) openModal(s.service_type, id);
     }
 
-    function editServer(serverId) {
-      // Find which type
-      let type = 'plex';
-      if (serversList.radarr.find(s => s.id === serverId)) type = 'radarr';
-      openServerModal(type, serverId);
-    }
-
-    document.getElementById('server-form').onsubmit = async (e) => {
+    document.getElementById('server-form').onsubmit = async e => {
       e.preventDefault();
-      const feedback = document.getElementById('server-form-feedback');
+      const id = document.getElementById('server-id').value;
       const type = document.getElementById('server-type').value;
-      const editId = document.getElementById('server-edit-id').value;
       const name = document.getElementById('server-name').value.trim();
       const url = document.getElementById('server-url').value.trim();
       const key = document.getElementById('server-key').value.trim();
       const isDefault = document.getElementById('server-default').checked;
 
-      if (!name || !url) {
-        feedback.innerHTML = '<div class="feedback error">Name and URL are required</div>';
-        return;
-      }
-
       try {
-        let res;
-        if (editId) {
-          // Update existing
+        if (id) {
           const body = { name, base_url: url };
           if (key) body.api_key = key;
-          res = await fetch(`/api/servers/${editId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-          });
-          if (isDefault) {
-            await fetch(`/api/servers/${editId}/default`, { method: 'POST' });
-          }
+          await fetch(`/api/servers/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+          if (isDefault) await fetch(`/api/servers/${id}/default`, { method: 'POST' });
         } else {
-          // Create new
-          const payload = {
-            service_type: type,
-            name,
-            base_url: url,
-            api_key: key || null,
-            is_default: isDefault
-          };
-          res = await fetch('/api/servers', {
+          await fetch('/api/servers', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ service_type: type, name, base_url: url, api_key: key || null, is_default: isDefault })
           });
         }
+        closeModal();
+        loadServers();
+      } catch (e) { alert('Error: ' + e.message); }
+    };
 
+    async function testServer(id) {
+      const badge = document.querySelector(`[data-server-status="${id}"]`);
+      if (badge) { badge.textContent = 'Testing...'; badge.className = 'server-status'; }
+      try {
+        const res = await fetch(`/api/servers/${id}/test`, { method: 'POST' });
         const data = await res.json();
-        if (data.ok) {
-          closeServerModal();
-          loadServers();
-        } else {
-          feedback.innerHTML = `<div class="feedback error">${escapeHtml(data.message)}</div>`;
+        if (badge) {
+          badge.textContent = data.ok ? 'Connected' : 'Failed';
+          badge.className = `server-status ${data.ok ? 'connected' : 'error'}`;
         }
-      } catch (err) {
-        console.error('Server form error:', err);
-        feedback.innerHTML = `<div class="feedback error">Error: ${err.message}</div>`;
+      } catch (e) {
+        if (badge) { badge.textContent = 'Error'; badge.className = 'server-status error'; }
+      }
+    }
+
+    async function deleteServer(id) {
+      if (!confirm('Delete this server?')) return;
+      await fetch(`/api/servers/${id}`, { method: 'DELETE' });
+      loadServers();
+    }
+
+    // Settings
+    async function loadSettings() {
+      try {
+        const res = await fetch('/api/settings');
+        const data = await res.json();
+        settings = data.values || {};
+        renderIntegrations();
+        renderAISettings();
+      } catch (e) { console.error(e); }
+    }
+
+    function renderIntegrations() {
+      const el = document.getElementById('integration-list');
+      el.innerHTML = INTEGRATIONS.map(int => `
+        <div class="integration-item" data-key="${int.key}">
+          <div class="integration-label">${esc(int.label)}</div>
+          <div class="integration-fields">
+            ${int.fields.map(f => `
+              <input type="${f.type}" id="${f.name}" placeholder="${esc(f.label)}" value="${esc(settings[f.name] || '')}">
+            `).join('')}
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="testIntegration('${int.key}')">Test</button>
+        </div>
+      `).join('');
+    }
+
+    function renderAISettings() {
+      document.getElementById('groq_api_key').value = settings.groq_api_key || '';
+      document.getElementById('groq_model').value = settings.groq_model || 'llama-3.3-70b-versatile';
+      document.getElementById('ollama_base_url').value = settings.ollama_base_url || 'http://localhost:11434';
+
+      if (settings.groq_api_key) {
+        document.getElementById('groq-status').textContent = 'Configured';
+        document.getElementById('groq-status').className = 'integration-status ok';
+      }
+      if (settings.ollama_base_url) {
+        refreshOllamaModels();
+      }
+    }
+
+    async function refreshOllamaModels() {
+      const select = document.getElementById('ollama_model');
+      const status = document.getElementById('ollama-status');
+      try {
+        const res = await fetch('/api/ollama/models');
+        const data = await res.json();
+        if (data.ok && data.models?.length) {
+          select.innerHTML = data.models.map(m =>
+            `<option value="${esc(m.name)}" ${m.name === settings.ollama_model ? 'selected' : ''}>${esc(m.name)}</option>`
+          ).join('');
+          status.textContent = `${data.models.length} models`;
+          status.className = 'integration-status ok';
+        } else {
+          select.innerHTML = '<option value="">No models found</option>';
+          status.textContent = 'No models';
+          status.className = 'integration-status';
+        }
+      } catch (e) {
+        select.innerHTML = '<option value="">Connection failed</option>';
+        status.textContent = 'Offline';
+        status.className = 'integration-status error';
+      }
+    }
+
+    async function testIntegration(key) {
+      const values = {};
+      INTEGRATIONS.find(i => i.key === key)?.fields.forEach(f => {
+        values[f.name] = document.getElementById(f.name)?.value || '';
+      });
+      try {
+        const res = await fetch('/api/integrations/test', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ integration: key, values })
+        });
+        const data = await res.json();
+        showFeedback('integration-feedback', data.message || (data.ok ? 'Connected!' : 'Failed'), data.ok);
+      } catch (e) {
+        showFeedback('integration-feedback', 'Test failed: ' + e.message, false);
+      }
+    }
+
+    document.getElementById('save-integrations').onclick = async () => {
+      const payload = {};
+      INTEGRATIONS.forEach(int => {
+        int.fields.forEach(f => { payload[f.name] = document.getElementById(f.name)?.value?.trim() || ''; });
+      });
+      try {
+        await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        showFeedback('integration-feedback', 'Settings saved!', true);
+      } catch (e) {
+        showFeedback('integration-feedback', 'Save failed', false);
       }
     };
 
-    async function deleteServer(serverId) {
-      if (!confirm('Delete this server configuration?')) return;
-
+    document.getElementById('save-ai').onclick = async () => {
+      const payload = {
+        groq_api_key: document.getElementById('groq_api_key').value.trim(),
+        groq_model: document.getElementById('groq_model').value,
+        ollama_base_url: document.getElementById('ollama_base_url').value.trim(),
+        ollama_model: document.getElementById('ollama_model').value
+      };
       try {
-        const res = await fetch(`/api/servers/${serverId}`, { method: 'DELETE' });
-        const data = await res.json();
-        if (data.ok) {
-          loadServers();
-        } else {
-          alert(data.message || 'Failed to delete');
-        }
-      } catch (e) {
-        alert('Error: ' + e.message);
-      }
+        await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        settings = { ...settings, ...payload };
+        renderAISettings();
+      } catch (e) { alert('Save failed'); }
+    };
+
+    function showFeedback(id, msg, ok) {
+      const el = document.getElementById(id);
+      el.className = `feedback ${ok ? 'success' : 'error'}`;
+      el.textContent = msg;
+      setTimeout(() => { el.textContent = ''; el.className = ''; }, 4000);
     }
 
-    async function setDefaultServer(serverId) {
+    // Seen Movies
+    async function loadSeenMovies() {
+      const q = document.getElementById('seen-search').value.trim();
       try {
-        const res = await fetch(`/api/servers/${serverId}/default`, { method: 'POST' });
+        const res = await fetch(`/api/seen/${getUserId()}?limit=200${q ? '&q=' + encodeURIComponent(q) : ''}`);
         const data = await res.json();
-        if (data.ok) {
-          loadServers();
-        } else {
-          alert(data.message || 'Failed to set default');
+        const el = document.getElementById('seen-list');
+        if (!data.length) {
+          el.innerHTML = '<div class="empty-state"><p>No movies tracked yet</p></div>';
+          return;
         }
-      } catch (e) {
-        alert('Error: ' + e.message);
-      }
+        el.innerHTML = data.slice(0, 50).map(m => `
+          <div class="seen-item">
+            <div>
+              <div class="seen-item-title">${esc(m.title)}</div>
+              <div class="seen-item-meta">${m.year || ''} · ${m.source || 'manual'}</div>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="removeSeen('${esc(m.movie_id)}')">Remove</button>
+          </div>
+        `).join('');
+      } catch (e) { console.error(e); }
     }
 
-    async function testServer(serverId) {
-      const row = document.querySelector(`[data-server-id="${serverId}"]`);
-      const badge = row?.querySelector('.status-badge');
-      if (badge) {
-        badge.textContent = 'Testing...';
-        badge.className = 'status-badge pending';
-      }
-
-      try {
-        const res = await fetch(`/api/servers/${serverId}/test`, { method: 'POST' });
-        const data = await res.json();
-        if (badge) {
-          if (data.ok) {
-            badge.textContent = data.message || 'Connected';
-            badge.className = 'status-badge success';
-          } else {
-            badge.textContent = data.message || 'Failed';
-            badge.className = 'status-badge error';
-          }
-        }
-      } catch (e) {
-        if (badge) {
-          badge.textContent = 'Error';
-          badge.className = 'status-badge error';
-        }
-      }
+    async function removeSeen(id) {
+      await fetch('/api/seen', { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ user_id: getUserId(), movie_id: id }) });
+      loadSeenMovies();
     }
+
+    document.getElementById('seen-search').oninput = () => {
+      clearTimeout(window._searchTimer);
+      window._searchTimer = setTimeout(loadSeenMovies, 250);
+    };
+
+    document.getElementById('import-plex').onclick = async () => {
+      const btn = document.getElementById('import-plex');
+      btn.disabled = true; btn.textContent = 'Importing...';
+      try {
+        const res = await fetch(`/api/seen/import/plex?user_id=${getUserId()}`, { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) loadSeenMovies();
+      } catch (e) { console.error(e); }
+      btn.disabled = false; btn.textContent = 'Import from Plex';
+    };
+
+    document.getElementById('add-movie-form').onsubmit = async e => {
+      e.preventDefault();
+      const title = document.getElementById('movie-title').value.trim();
+      const year = document.getElementById('movie-year').value;
+      if (!title) return;
+      await fetch('/api/seen', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          user_id: getUserId(),
+          movie_id: `manual:${title.toLowerCase().replace(/\s+/g, '_')}:${year || 'na'}`,
+          title, year: year ? parseInt(year) : null, source: 'manual'
+        })
+      });
+      document.getElementById('add-movie-form').reset();
+      loadSeenMovies();
+    };
+
+    // Init
+    loadServers();
+    loadSettings();
+    loadSeenMovies();
   </script>
 </body>
 </html>
