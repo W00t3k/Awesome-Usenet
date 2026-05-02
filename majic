@@ -240,6 +240,204 @@ def cmd_dev(args: argparse.Namespace) -> int:
         return 0
 
 
+# Ollama model selector functions
+def get_memory_gb() -> int:
+    """Get total system memory in GB."""
+    if sys.platform == "darwin":
+        # macOS
+        import subprocess
+        result = subprocess.run(["sysctl", "-n", "hw.memsize"], capture_output=True, text=True)
+        mem_bytes = int(result.stdout.strip())
+        return mem_bytes // 1024 // 1024 // 1024
+    else:
+        # Linux
+        try:
+            with open("/proc/meminfo", "r") as f:
+                for line in f:
+                    if line.startswith("MemTotal:"):
+                        mem_kb = int(line.split()[1])
+                        return mem_kb // 1024 // 1024
+        except FileNotFoundError:
+            pass
+    return 8  # Fallback to 8GB
+
+
+def get_available_memory_gb() -> int:
+    """Get available system memory in GB."""
+    if sys.platform == "darwin":
+        # macOS
+        import subprocess
+        result = subprocess.run(["vm_stat"], capture_output=True, text=True)
+        page_size = 4096  # Default page size
+        for line in result.stdout.split("\n"):
+            if "page size of" in line:
+                page_size = int(line.split()[-1])
+            elif "Pages free:" in line:
+                free_pages = int(line.split()[2].rstrip("."))
+            elif "Pages inactive:" in line:
+                inactive_pages = int(line.split()[2].rstrip("."))
+        
+        available_bytes = (free_pages + inactive_pages) * page_size
+        return available_bytes // 1024 // 1024 // 1024
+    else:
+        # Linux
+        try:
+            with open("/proc/meminfo", "r") as f:
+                available_kb = 0
+                for line in f:
+                    if line.startswith("MemAvailable:") or line.startswith("MemFree:"):
+                        available_kb += int(line.split()[1])
+                return available_kb // 1024 // 1024
+        except FileNotFoundError:
+            pass
+    return 4  # Fallback to 4GB
+
+
+def get_optimal_model(available_memory_gb: int) -> tuple[str, str]:
+    """Get optimal model based on available memory."""
+    if available_memory_gb >= 48:
+        return "llama3.3:70b-instruct-q4_K_M", "Llama 3.3 70B (GPT-4 class, best performance)"
+    elif available_memory_gb >= 32:
+        return "qwen2.5:32b", "Qwen2.5 32B (Excellent multilingual support)"
+    elif available_memory_gb >= 16:
+        return "deepseek-r1:14b", "DeepSeek R1 14B (Chain-of-thought reasoning)"
+    elif available_memory_gb >= 8:
+        return "llama3.1:8b-instruct-q8_0", "Llama 3.1 8B (Good balance of speed/capability)"
+    elif available_memory_gb >= 4:
+        return "qwen2.5:7b", "Qwen2.5 7B (Efficient for general tasks)"
+    else:
+        return "phi3:mini", "Phi-3 Mini (Ultra-lightweight, <4GB RAM)"
+
+
+def update_env_model(model: str) -> None:
+    """Update .env file with the selected model."""
+    env_file = PROJECT_ROOT / ".env"
+    
+    if env_file.exists():
+        content = env_file.read_text()
+        lines = content.split("\n")
+        
+        # Update existing OLLAMA_MODEL line or add new one
+        updated = False
+        for i, line in enumerate(lines):
+            if line.startswith("OLLAMA_MODEL="):
+                lines[i] = f"OLLAMA_MODEL={model}"
+                updated = True
+                break
+        
+        if not updated:
+            lines.append(f"OLLAMA_MODEL={model}")
+        
+        env_file.write_text("\n".join(lines))
+        print(f"📝 Updated .env with OLLAMA_MODEL={model}")
+    else:
+        env_file.write_text(f"OLLAMA_MODEL={model}\n")
+        print(f"📝 Created .env with OLLAMA_MODEL={model}")
+
+
+def cmd_ollama(args: argparse.Namespace) -> int:
+    """Smart Ollama model selector."""
+    from rich.console import Console
+    console = Console()
+    
+    if args.action == "list":
+        console.print("📋 Available models by memory requirement:\n")
+        console.print("48GB+ RAM:  llama3.3:70b-instruct-q4_K_M  (GPT-4 class)")
+        console.print("32GB+ RAM:  qwen2.5:32b                      (Multilingual)")
+        console.print("16GB+ RAM:  deepseek-r1:14b                  (Reasoning)")
+        console.print("8GB+ RAM:   llama3.1:8b-instruct-q8_0        (Balanced)")
+        console.print("4GB+ RAM:   qwen2.5:7b                       (Efficient)")
+        console.print("<4GB RAM:   phi3:mini                        (Ultra-light)")
+        return 0
+    
+    # Auto mode
+    console.print("🧠 Smart Ollama Model Selector\n")
+    
+    # Check if ollama is available
+    try:
+        subprocess.run(["ollama", "--version"], capture_output=True, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        console.print("❌ Ollama not found. Please install Ollama first.")
+        console.print("📥 Visit: https://ollama.ai")
+        return 1
+    
+    # Check if ollama is running
+    try:
+        subprocess.run(["ollama", "list"], capture_output=True, check=True)
+    except subprocess.CalledProcessError:
+        console.print("🚀 Starting Ollama server...")
+        subprocess.Popen(["ollama", "serve"])
+        import time
+        time.sleep(3)
+    
+    # Get memory info
+    total_memory = get_memory_gb()
+    available_memory = get_available_memory_gb()
+    
+    console.print(f"💾 System Memory: {total_memory}GB total, {available_memory}GB available")
+    
+    # Get optimal model
+    selected_model, description = get_optimal_model(available_memory)
+    
+    console.print(f"\n🎯 Recommended Model: {selected_model}")
+    console.print(f"📋 {description}\n")
+    
+    # Check if model already exists
+    try:
+        result = subprocess.run(["ollama", "list"], capture_output=True, text=True)
+        if selected_model in result.stdout:
+            console.print(f"✅ Model '{selected_model}' already exists locally")
+            
+            # Ask if user wants to update .env
+            if input("📝 Update .env to use this model? (y/N): ").lower().startswith('y'):
+                update_env_model(selected_model)
+            
+            console.print("🚀 Ready to use! Start with: ./majic dev")
+            return 0
+    except subprocess.CalledProcessError:
+        pass
+    
+    # Show estimated size
+    model_size = selected_model.split(":")[1].split("-")[0].replace("b", "GB")
+    console.print(f"📊 Estimated download size: ~{model_size}")
+    console.print()
+    
+    # Ask for confirmation
+    response = input(f"📥 Download '{selected_model}'? (Y/n): ").strip().lower()
+    if response.startswith('n'):
+        console.print("❌ Download cancelled")
+        return 1
+    
+    # Download the model
+    console.print(f"📥 Downloading {selected_model}...")
+    try:
+        subprocess.run(["ollama", "pull", selected_model], check=True)
+        console.print(f"✅ Successfully downloaded {selected_model}")
+        
+        # Update .env file
+        update_env_model(selected_model)
+        
+        console.print("\n🎉 Setup complete!")
+        console.print("🚀 Start the app with: ./majic dev")
+        
+        # Try to get local IP
+        try:
+            import socket
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            s.close()
+            console.print(f"🌐 Access at: http://{local_ip}:8080")
+        except:
+            pass
+            
+    except subprocess.CalledProcessError:
+        console.print("❌ Failed to download model")
+        return 1
+    
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Majic Movie Selector CLI",
@@ -252,6 +450,8 @@ Examples:
   ./majic logs               Watch live server logs
   ./majic restart            Graceful restart
   ./majic dev                Development mode with hot reload
+  ./majic ollama             Auto-detect memory and download optimal model
+  ./majic ollama list        Show available models by memory requirement
         """,
     )
 
@@ -298,6 +498,17 @@ Examples:
     # Dev command
     dev_parser = subparsers.add_parser("dev", help="Start in development mode")
     dev_parser.set_defaults(func=cmd_dev)
+
+    # Ollama command
+    ollama_parser = subparsers.add_parser("ollama", help="Smart Ollama model selector")
+    ollama_parser.add_argument(
+        "action",
+        choices=["auto", "list"],
+        nargs="?",
+        default="auto",
+        help="Action: auto (detect and download), list (show available models)",
+    )
+    ollama_parser.set_defaults(func=cmd_ollama)
 
     args = parser.parse_args()
 
