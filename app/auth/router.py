@@ -19,7 +19,7 @@ auth_router = APIRouter(prefix="/api/auth", tags=["auth"])
 # Google OAuth configuration
 GOOGLE_CLIENT_ID = getattr(settings, "google_client_id", None) or ""
 GOOGLE_CLIENT_SECRET = getattr(settings, "google_client_secret", None) or ""
-GOOGLE_REDIRECT_URI = getattr(settings, "google_redirect_uri", None) or "http://0.0.0.0:8080/api/auth/google/callback"
+GOOGLE_REDIRECT_URI = getattr(settings, "google_redirect_uri", None) or "http://0.0.0.0:8443/api/auth/google/callback"
 
 # OAuth state storage (in production, use Redis or similar)
 _oauth_states: dict[str, dict] = {}

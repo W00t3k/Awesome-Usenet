@@ -39,7 +39,7 @@ class LimitsConfig(BaseSettings):
 
 class Settings(BaseSettings):
     app_host: str = Field(default="0.0.0.0", alias="APP_HOST")
-    app_port: int = Field(default=8080, alias="APP_PORT")
+    app_port: int = Field(default=8443, alias="APP_PORT")
     app_title: str = Field(default="Majic Movie", alias="APP_TITLE")
 
     tmdb_api_key: str | None = Field(default=None, alias="TMDB_API_KEY")
@@ -107,7 +107,7 @@ class Settings(BaseSettings):
     google_client_id: str | None = Field(default=None, alias="GOOGLE_CLIENT_ID")
     google_client_secret: str | None = Field(default=None, alias="GOOGLE_CLIENT_SECRET")
     google_redirect_uri: str = Field(
-        default="http://0.0.0.0:8080/api/auth/google/callback",
+        default="http://0.0.0.0:8443/api/auth/google/callback",
         alias="GOOGLE_REDIRECT_URI",
     )
 

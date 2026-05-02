@@ -48,7 +48,7 @@ echo ""
 echo "📋 Configuration"
 echo "-----------------"
 
-get_input "App port" "8080" "app_port"
+get_input "App port" "8443" "app_port"
 get_input "App title" "Majic Movie Selector" "app_title"
 get_input "Bind to all interfaces (0.0.0.0)" "0.0.0.0" "app_host"
 

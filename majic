@@ -440,7 +440,7 @@ def main() -> int:
         epilog="""
 Examples:
   ./majic start              Start with auto-restart and health monitoring
-  ./majic start --port 8080  Start on a different port
+  ./majic start --port 8443  Start on a different port
   ./majic status             Check if server is running
   ./majic logs               Watch live server logs
   ./majic restart            Graceful restart
