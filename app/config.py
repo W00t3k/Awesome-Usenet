@@ -63,9 +63,7 @@ class Settings(BaseSettings):
     radarr_api_key: str | None = Field(default=None, alias="RADARR_API_KEY")
 
     nzbgeek_rss_url: str | None = Field(
-        default=(
-            "https://api.nzbgeek.info/rss?t=search&cat=2000&apikey={API_KEY}"
-        ),
+        default="https://api.nzbgeek.info/api?t=search&cat=2000&apikey={API_KEY}",
         alias="NZBGEEK_RSS_URL",
     )
     nzbgeek_api_key: str | None = Field(default=None, alias="NZBGEEK_API_KEY")

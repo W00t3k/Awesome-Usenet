@@ -107,7 +107,7 @@ PLEX_BASE_URL=$plex_base_url
 PLEX_TOKEN=$plex_token
 
 # Optional NZBGeek integration
-NZBGEEK_RSS_URL=https://api.nzbgeek.info/rss?t=search&cat=2000&apikey={API_KEY}
+NZBGEEK_RSS_URL=https://api.nzbgeek.info/api?t=search&cat=2000&apikey={API_KEY}
 NZBGEEK_API_KEY=
 
 # Optional DrunkenSlug integration
