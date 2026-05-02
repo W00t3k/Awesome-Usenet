@@ -25,7 +25,7 @@ def start_server(port: int):
 
     config = uvicorn.Config(
         app,
-        host="127.0.0.1",
+        host="0.0.0.0",
         port=port,
         log_level="warning",
         access_log=False,
@@ -46,7 +46,13 @@ def wait_for_server(port: int, timeout: int = 30):
 
 def main():
     port = 8443
-    url = f"http://127.0.0.1:{port}"
+    # Get local IP for remote access
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("8.8.8.8", 80))
+    local_ip = s.getsockname()[0]
+    s.close()
+    url = f"http://{local_ip}:{port}"
 
     # Check if server is already running
     server_was_running = is_port_in_use(port)
