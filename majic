@@ -388,9 +388,8 @@ def cmd_ollama(args: argparse.Namespace) -> int:
         if selected_model in result.stdout:
             console.print(f"✅ Model '{selected_model}' already exists locally")
             
-            # Ask if user wants to update .env
-            if input("📝 Update .env to use this model? (y/N): ").lower().startswith('y'):
-                update_env_model(selected_model)
+            # Auto-update .env without prompting
+            update_env_model(selected_model)
             
             console.print("🚀 Ready to use! Start with: ./majic dev")
             return 0
@@ -400,13 +399,7 @@ def cmd_ollama(args: argparse.Namespace) -> int:
     # Show estimated size
     model_size = selected_model.split(":")[1].split("-")[0].replace("b", "GB")
     console.print(f"📊 Estimated download size: ~{model_size}")
-    console.print()
-    
-    # Ask for confirmation
-    response = input(f"📥 Download '{selected_model}'? (Y/n): ").strip().lower()
-    if response.startswith('n'):
-        console.print("❌ Download cancelled")
-        return 1
+    console.print("📥 Auto-downloading optimal model...")
     
     # Download the model
     console.print(f"📥 Downloading {selected_model}...")
